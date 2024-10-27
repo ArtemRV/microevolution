@@ -114,85 +114,44 @@ grid = Grid(WIDTH, HEIGHT, 100)  # Создание сетки для оптим
 
 
 
-import torch
-import torch.nn as nn
-import torch.optim as optim
-import numpy as np
-import random
+# Больше не используется
+class MatrixPlotter:
+    def __init__(self, matrix):
+        self.matrix = matrix
+        width, height = self.matrix.shape
+        self.width = width
+        self.height = height
+        self.colors = self.generate_colors()
+        self.loss = []
+        self.loss_max = 200
 
-# Определение архитектуры нейронной сети для DQN
-class DQN(nn.Module):
-    def __init__(self):
-        super(DQN, self).__init__()
-        self.fc1 = nn.Linear(12, 64)  # Входной слой (12 параметров)
-        self.fc2 = nn.Linear(64, 32)  # Скрытый слой
-        self.fc3 = nn.Linear(32, 16)  # Скрытый слой
-        self.fc4 = nn.Linear(16, 2)   # Выходной слой (две координаты для перемещения)
+    def generate_colors(self):
+        return [(random.randint(0, 255), random.randint(0, 255), random.randint(0, 255)) for _ in range(self.width)]
 
-    def forward(self, x):
-        x = torch.relu(self.fc1(x))
-        x = torch.relu(self.fc2(x))
-        x = torch.relu(self.fc3(x))
-        x = self.fc4(x)
-        return x
+    def update(self, matrix):
+        self.matrix = matrix
 
-# Инициализация DQN модели, оптимизатора и функции потерь
-model = DQN()
-optimizer = optim.Adam(model.parameters(), lr=0.001)
-loss_fn = nn.MSELoss()
+    def draw(self, screen):
+        shift_x = 10
+        shift_y = 10
+        ratio_x = 20
+        ratio_y = 4
+        for i in range(self.width):
+            for j in range(self.height - 1):
+                height1 = self.matrix[i][j] * 10 + (ratio_y * (i + 1)) + shift_y
+                height2 = self.matrix[i][j + 1] * 10 + (ratio_y * (i + 1)) + shift_y
+                width1 = ratio_x * j + shift_x
+                width2 = ratio_x * (j + 1) + shift_x
+                pygame.draw.line(screen, self.colors[i], (width1, height1), (width2, height2), 2)
 
-# Параметры обучения
-gamma = 0.99  # Фактор дисконтирования
-epsilon = 0.1  # Вероятность случайного действия (эксплорейшн)
-memory = []  # Опыт для реплея
-batch_size = 64  # Размер батча для обучения
-max_memory = 1000  # Максимальный размер памяти
+    def update_loss(self, loss):
+        if len(self.loss) > self.loss_max:
+            self.loss.pop(0)
+        self.loss.append(loss)
 
-# Функция получения награды
-def get_reward(state, action, next_state, done):
-    reward = 0
-    if done:
-        reward -= 100  # Штраф за столкновение или потерю энергии
-    else:
-        distance_to_target = np.linalg.norm(np.array(next_state[8:10]) - np.array(next_state[6:8]))  # Расстояние до цели
-        reward += 10 / (distance_to_target + 1)  # Чем ближе к цели, тем больше награда
-        if next_state[-1] < state[-1]:  # Проверка уровня энергии
-            reward -= 1  # Штраф за уменьшение энергии
-    return reward
+    def draw_loss(self, screen):
+        shift_x = 10
+        shift_y = screen.get_height() - 200
+        for i, loss_item in enumerate(self.loss):
+            pygame.draw.line(screen, RED, (i + shift_x, shift_y), (i + shift_x, shift_y - loss_item), 2)
 
-# Процесс обучения
-for episode in range(1000):  # Количество эпизодов
-    state = env.reset()  # Начальное состояние (например, координаты, энергия и т.д.)
-    done = False
-    total_reward = 0
-    
-    while not done:
-        # Эпсилон-гриди выбор действия
-        if random.uniform(0, 1) < epsilon:
-            action = np.random.uniform(-1, 1, size=2)  # Случайное действие
-        else:
-            action = model(torch.tensor(state, dtype=torch.float32)).detach().numpy()  # Прогноз нейронной сети
-        
-        next_state, done = env.step(action)  # Получаем новое состояние от среды
-        reward = get_reward(state, action, next_state, done)  # Рассчитываем награду
-        
-        # Сохраняем опыт
-        memory.append((state, action, reward, next_state, done))
-        if len(memory) > max_memory:
-            memory.pop(0)
-        
-        state = next_state
-        total_reward += reward
-
-        # Обучение модели
-        if len(memory) > batch_size:
-            batch = random.sample(memory, batch_size)
-            for s, a, r, ns, d in batch:
-                target = r + gamma * model(torch.tensor(ns, dtype=torch.float32)).max().item() * (1 - d)
-                pred = model(torch.tensor(s, dtype=torch.float32))
-                loss = loss_fn(pred, torch.tensor(a, dtype=torch.float32))
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
-
-    print(f'Episode {episode}, Total Reward: {total_reward}')

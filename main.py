@@ -4,14 +4,15 @@ import pygame
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from collections import deque
+from collections import deque, OrderedDict
 
 pygame.init()
 torch.autograd.set_detect_anomaly(True)
 
 # Параметры окна
 WIDTH, HEIGHT = 1400, 800
-screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+screen = pygame.display.set_mode((1500, 800), pygame.RESIZABLE)
+# screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
 pygame.display.set_caption("Petri Dish Simulation")
 
 # Основные цвета
@@ -51,13 +52,18 @@ clock = pygame.time.Clock()
 
 # Класс для препятствий
 class Obstacle:
-    def __init__(self):
-        angle = np.random.uniform(0, 2 * np.pi)
-        radius = np.random.uniform(0, RADIUS_DISH - OBSTACLE_RADIUS)
-        self.x = CENTER[0] + radius * np.cos(angle)
-        self.y = CENTER[1] + radius * np.sin(angle)
-        self.vx = np.random.uniform(-2, 2)
-        self.vy = np.random.uniform(-2, 2)
+    def __init__(self, organism, obstacles):
+        while True:
+            angle = np.random.uniform(0, 2 * np.pi)
+            radius = np.random.uniform(0, RADIUS_DISH - OBSTACLE_RADIUS)
+            x = CENTER[0] + radius * np.cos(angle)
+            y = CENTER[1] + radius * np.sin(angle)
+
+            if not check_collision(x, y, OBSTACLE_RADIUS, organism.x, organism.y, ORGANISM_RADIUS):
+                if not any(check_collision(x, y, OBSTACLE_RADIUS, o.x, o.y, OBSTACLE_RADIUS) for o in obstacles):
+                    self.x, self.y = x, y
+                    self.vx, self.vy = np.random.uniform(-2, 2, 2)
+                    break
 
     def move(self):
         # Проверка столкновений с чашкой Петри и другими препятствиями
@@ -83,11 +89,30 @@ class Obstacle:
 
 # Класс для пищи
 class Food:
-    def __init__(self):
-        angle = np.random.uniform(0, 2 * np.pi)
-        distance = np.random.uniform(0, RADIUS_DISH - FOOD_RADIUS)
-        self.x = CENTER[0] + distance * np.cos(angle)
-        self.y = CENTER[1] + distance * np.sin(angle)
+    def __init__(self, obstacles, organism, foods):
+        while True:
+            angle = np.random.uniform(0, 2 * np.pi)
+            radius = np.random.uniform(0, RADIUS_DISH - FOOD_RADIUS)
+            x = CENTER[0] + radius * np.cos(angle)
+            y = CENTER[1] + radius * np.sin(angle)
+            if not check_collision(x, y, FOOD_RADIUS, organism.x, organism.y, ORGANISM_RADIUS):
+                collision = False
+                for obstacle in obstacles:
+                    if check_collision(x, y, FOOD_RADIUS, obstacle.x, obstacle.y, OBSTACLE_RADIUS):
+                        collision = True
+                        break
+                if not collision:
+                    if foods:
+                        for food in foods:
+                            if food == self:
+                                continue
+                            if check_collision(x, y, FOOD_RADIUS, food.x, food.y, FOOD_RADIUS):
+                                collision = True
+                                break
+                    if not collision:
+                        self.x, self.y = x, y
+                        break
+                
 
     def draw(self, screen):
         pygame.draw.circle(screen, GREEN, (int(self.x), int(self.y)), FOOD_RADIUS)
@@ -96,14 +121,7 @@ class Food:
         # Проверка столкновения между организмом и едой
         distance = np.hypot(self.x - organism.x, self.y - organism.y)
         return distance < (FOOD_RADIUS + ORGANISM_RADIUS)
-
-    def regenerate(self):
-        """Регенерация пищи в новом месте."""
-        angle = np.random.uniform(0, 2 * np.pi)
-        radius = np.random.uniform(0, RADIUS_DISH - FOOD_RADIUS)
-        self.x = CENTER[0] + radius * np.cos(angle)
-        self.y = CENTER[1] + radius * np.sin(angle)
-
+        
 
 class MatrixPlotter:
     def __init__(self, matrix):
@@ -141,16 +159,30 @@ class MatrixPlotter:
 
     def draw_loss(self, screen):
         shift_x = 10
-        shift_y = screen.get_height() - 200
+        plotter_shift_x = 30
+        shift_y = screen.get_height() - 300
         for i, loss_item in enumerate(self.loss):
-            pygame.draw.line(screen, RED, (i + shift_x, shift_y), (i + shift_x, shift_y - loss_item), 2)
+            if loss_item > 1:
+                loss_value = np.log(loss_item) * 20
+            else:
+                loss_value = loss_item
+            pygame.draw.line(screen, RED, (i + shift_x + plotter_shift_x, shift_y), (i + shift_x + plotter_shift_x, shift_y - loss_value), 1)
+        # Добавить шкалу логарифмического масштаба
+        render_text(screen, "0", shift_x, shift_y)
+        pygame.draw.line(screen, BLACK, (shift_x + plotter_shift_x, shift_y), (shift_x + plotter_shift_x + self.loss_max, shift_y), 1)
+        render_text(screen, "10", shift_x, shift_y - 46)
+        pygame.draw.line(screen, BLACK, (shift_x + plotter_shift_x, shift_y - 46), (shift_x + plotter_shift_x + self.loss_max, shift_y - 46), 1)
+        render_text(screen, "100", shift_x, shift_y - 92)
+        pygame.draw.line(screen, BLACK, (shift_x + plotter_shift_x, shift_y - 92), (shift_x + plotter_shift_x + self.loss_max, shift_y - 92), 1)
+        render_text(screen, "1000", shift_x, shift_y - 138)
+        pygame.draw.line(screen, BLACK, (shift_x + plotter_shift_x, shift_y - 138), (shift_x + plotter_shift_x + self.loss_max, shift_y - 138), 1)
 
 
 class VectorsPlotter:
     def __init__(self):
         self.vectors = []
         self.start = []
-        self.draw_center = [screen.get_width() - 300, screen.get_height() // 2 - 100]
+        self.draw_center = [screen.get_width() - 400, screen.get_height() // 2 - 100]
         self.rewards = []
 
     def update(self, organism, reward):
@@ -164,7 +196,7 @@ class VectorsPlotter:
         x = 100
         for i, vector in enumerate(self.vectors):
             shift_x = i // a * x
-            shift_y = i * a - (i // a) * a * a
+            shift_y = i * a - (i // a) * a**2
             start_pos = [self.draw_center[0] + shift_x, self.draw_center[1] + shift_y]
             end_pos = [self.draw_center[0] + int(vector[0] * 10)  + shift_x, self.draw_center[1] + int(vector[1] * 10) + shift_y]
             pygame.draw.line(screen, RED, start_pos, end_pos, 2)  # Толщина линии фиксирована на 2 пикселя
@@ -216,7 +248,18 @@ class Organism:
         self.input_vector = None
         self.reset_status = False
         self.done = False
+        self.food_eaten = 0
         self.death_counter = 0
+        self.dish_collision_counter = 0
+        self.obstacle_collision_counter = 0
+        self.energy_loss_counter = 0
+
+    def reset_counters(self):
+        self.food_eaten = 0
+        self.death_counter = 0
+        self.dish_collision_counter = 0
+        self.obstacle_collision_counter = 0
+        self.energy_loss_counter = 0
 
     def get_input_vector(self, obstacles, foods):
         # Находим ближайшую еду и препятствия
@@ -240,7 +283,7 @@ class Organism:
         ])
         return torch.tensor(self.input_vector, dtype=torch.float32)
 
-    def move(self, action, obstacles, reward):
+    def move(self, action, obstacles, reward, foods):
         self.done = False
         self.reset_status = False
         action_tensor = action.clone().detach().view(-1)  # Ensure action is a PyTorch tensor
@@ -257,7 +300,7 @@ class Organism:
         # Столкновение с границей чашки Петри
         self.dish_collision(reward)
         self.obstacle_collision(reward)
-        self.food_collision(reward)
+        self.food_collision(reward, obstacles, foods)
         self.energy_update(reward)
 
         if self.reset_status == True:
@@ -265,31 +308,34 @@ class Organism:
 
         return self.done
 
-    def food_collision(self, reward):
+    def food_collision(self, reward, obstacles, foods):
         for i, food in enumerate(self.closest_food):
             if food.check_eaten(self):
                 self.energy += 5
                 foods.remove(food)
-                foods.append(Food())
+                foods.append(Food(obstacles, self, foods))
                 new_reward = 30
-                self.done = True
+                self.food_eaten += 1
             else:
-                new_reward = (3 - i) / 3 * calculate_reward(self.x, self.y, self.vx, self.vy, food.x, food.y, 300)
+                new_reward = (3 - i) / 3 * calculate_reward(self.x, self.y, self.vx, self.vy, food.x, food.y, ORGANISM_RADIUS, FOOD_RADIUS, 200)
             reward.update(new_reward, 'eat')
 
     def obstacle_collision(self, reward):
         for i, obstacle in enumerate(self.closest_obstacles):
             if check_collision(self.x, self.y, ORGANISM_RADIUS, obstacle.x, obstacle.y, OBSTACLE_RADIUS):
                 new_reward = -50
+                self.obstacle_collision_counter += 1
                 self.reset_status = True
             else:
-                new_reward = (3 - i) / 3 * calculate_obstacle_collision_reward(self.x, self.y, obstacle.x, obstacle.y, -40)
+                new_reward = -(3 - i) / 3 * calculate_reward(self.x, self.y, self.vx, self.vy, obstacle.x, obstacle.y, ORGANISM_RADIUS, OBSTACLE_RADIUS, 300)
+                # new_reward = (3 - i) / 3 * calculate_obstacle_collision_reward(self.x, self.y, obstacle.x, obstacle.y, -40)
             reward.update(new_reward, 'obstacle_collision')
 
     def energy_update(self, reward):
-        self.energy -= 0.01 + np.hypot(self.vx, self.vy) * 0.001  # Штраф за скорость
+        self.energy -= 0.03 + np.hypot(self.vx, self.vy) * 0.001  # Штраф за скорость
         if self.energy <= 0:
             new_reward = -40
+            self.energy_loss_counter += 1
             self.reset_status = True
         else:
             new_reward = calculate_simple_reward(self.energy, -3)
@@ -299,9 +345,10 @@ class Organism:
         overlap = calculate_distance(self.x, self.y, CENTER[0], CENTER[1]) + ORGANISM_RADIUS - RADIUS_DISH
         if overlap > 0:
             new_reward = -30
+            self.dish_collision_counter += 1
             self.reset_status = True
         elif overlap > -30:
-            new_reward = calculate_simple_reward(overlap, -15)
+            new_reward = calculate_simple_reward(overlap, -25)
         else:
             new_reward = 0
         reward.update(new_reward, 'dish_collision')
@@ -379,10 +426,11 @@ class Reward:
 
 class Statistics:
     def __init__(self):
-        self.episode = {}
+        self.episode = OrderedDict()
         self.energy_max = 0
         self.total_reward = 0
         self.total_time = 0
+        self.max_episodes = 9
 
     def update_energy_max(self, energy):
         if energy > self.energy_max:
@@ -395,32 +443,57 @@ class Statistics:
         self.energy_max = 0
         self.total_reward = 0
         
-    def create_episode(self, episode, death_counter):
+    def create_episode(self, episode, organism):
         self.reset()
-        self.episode[episode + 1] = {
+        self.delete_episode()
+        self.episode[episode] = {
             'energy max': self.energy_max,
-            'death counter': death_counter,
+            'food eaten': organism.food_eaten,
+            'death counter': organism.death_counter,
+            'dish collision counter': organism.dish_collision_counter,
+            'obstacle collision counter': organism.obstacle_collision_counter,
+            'energy loss counter': organism.energy_loss_counter,
             'reward': self.total_reward,
             'time': self.total_time
         }
 
-    def update_episode(self, episode, death_counter):
-        self.episode[episode + 1]['energy max'] = self.energy_max
-        self.episode[episode + 1]['death counter'] = death_counter
-        self.episode[episode + 1]['reward'] = self.total_reward
-        self.episode[episode + 1]['time'] = self.total_time
+    def update_episode(self, episode, organism):
+        self.episode[episode]['energy max'] = self.energy_max
+        self.episode[episode]['food eaten'] = organism.food_eaten
+        self.episode[episode]['death counter'] = organism.death_counter
+        self.episode[episode]['dish collision counter'] = organism.dish_collision_counter
+        self.episode[episode]['obstacle collision counter'] = organism.obstacle_collision_counter
+        self.episode[episode]['energy loss counter'] = organism.energy_loss_counter
+        self.episode[episode]['reward'] = self.total_reward
+        self.episode[episode]['time'] = self.total_time
+
+    def delete_episode(self):
+        if len(self.episode) > self.max_episodes:
+            self.episode.popitem(last=False)
 
     def draw_statistics(self, screen):
         shift_x = 10
         shift_y = screen.get_height() - 100
-        for episode, data in self.episode.items():
+        episode_list = list(self.episode.items())[-self.max_episodes:]
+        data_keys = [
+            ("Energy max", "energy max"),
+            ("Food eaten", "food eaten"),
+            ("Death counter", "death counter"),
+            ("Dish collision counter", "dish collision counter"),
+            ("Obstacle collision", "obstacle collision counter"),
+            ("Energy loss counter", "energy loss counter"),
+            ("Total reward", "reward"),
+            ("Time", "time")
+        ]
+        
+        for i, (episode, data) in enumerate(episode_list):
             ratio_x = 150
-            total_x_shift = shift_x + ratio_x * (episode - 1)
+            total_x_shift = shift_x + ratio_x * i
             render_text(screen, f"Episode: {episode}", total_x_shift, shift_y)
-            render_text(screen, f"Energy max: {round(data['energy max'], 2)}", total_x_shift, shift_y + 10)
-            render_text(screen, f"Death counter: {data['death counter']}", total_x_shift, shift_y + 20)
-            render_text(screen, f"Total reward: {round(data['reward'], 2)}", total_x_shift, shift_y + 30)
-            render_text(screen, f"Time: {round(data['time'], 2)}", total_x_shift, shift_y + 40)
+            
+            for i, (label, key) in enumerate(data_keys):
+                value = round(data[key], 2) if isinstance(data[key], float) else data[key]
+                render_text(screen, f"{label}: {value}", total_x_shift, shift_y + (i + 1) * 10)
 
 def calculate_simple_reward(parameter, factor):
     calculated_reward = -5 / abs(parameter)
@@ -428,12 +501,42 @@ def calculate_simple_reward(parameter, factor):
         calculated_reward = factor
     return calculated_reward
 
-def calculate_reward(x1, y1, vx, vy, x2, y2, factor):
-    initial_distance = np.linalg.norm(np.array([x1, y1]) - np.array([x2, y2]))
-    new_distance = np.linalg.norm(np.array([x1 + vx, y1 + vy]) - np.array([x2, y2]))
+# def calculate_reward(x1, y1, vx, vy, x2, y2, factor):
+#     initial_distance = np.linalg.norm(np.array([x1, y1]) - np.array([x2, y2]))
+#     new_distance = np.linalg.norm(np.array([x1 + vx, y1 + vy]) - np.array([x2, y2]))
+#     distance_diff = initial_distance - new_distance
+#     calculated_reward = distance_diff * factor * (1 / new_distance)
+#     return calculated_reward
+
+# def calculate_reward(x1, y1, vx, vy, x2, y2, factor):
+#     new_distance = np.linalg.norm(np.array([x1 + vx, y1 + vy]) - np.array([x2, y2])) - ORGANISM_RADIUS - FOOD_RADIUS
+#     reward = (20 / new_distance ** 2) * 100
+#     if reward > 13:
+#         reward = 13
+#     return reward
+
+def calculate_reward(x1, y1, vx, vy, x2, y2, r1, r2, factor):
+    # Вычисляем смещение после шага
+    dx, dy = x1 - x2, y1 - y2
+    initial_distance = np.hypot(dx, dy)  # Евклидово расстояние
+
+    # Новая позиция после перемещения
+    new_x1, new_y1 = x1 + vx, y1 + vy
+    new_dx, new_dy = new_x1 - x2, new_y1 - y2
+    new_distance = np.hypot(new_dx, new_dy)
+
+    # Награда за изменение расстояния
     distance_diff = initial_distance - new_distance
-    calculated_reward = distance_diff * factor * (1 / new_distance)
-    return calculated_reward
+    vector_reward = distance_diff * factor * (1 / new_distance)
+
+    # Награда за близость к цели
+    adjusted_distance = new_distance - r1 - r2
+    distance_reward = (20 / adjusted_distance ** 2) * 100
+
+    # Общая награда с ограничением
+    reward = min(vector_reward + distance_reward, 25)
+    
+    return reward
 
 def calculate_obstacle_collision_reward(target_x, target_y, current_x, current_y, limit):
     distance = np.hypot(target_x - current_x, target_y - current_y) - ORGANISM_RADIUS - OBSTACLE_RADIUS
@@ -541,11 +644,9 @@ optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
 loss_fn = nn.MSELoss()
 
 # Буфер реплея
-batch_size = 40  # Размер батча для обучения
-memory = deque(maxlen=batch_size * 10)  # Опыт для реплея
+batch_size = 80  # Размер батча для обучения
+memory = deque(maxlen=batch_size * 20)  # Опыт для реплея
 
-obstacles = [Obstacle() for _ in range(OBSTACLE_QUANTITY)]
-foods = [Food() for _ in range(FOOD_QUANTITY)]
 organism = Organism()
 reward = Reward()
 matrix_plotter = MatrixPlotter(model.fc1.weight.data.numpy().squeeze())
@@ -553,10 +654,15 @@ vectors_plotter = VectorsPlotter()
 statistics = Statistics()
 
 # Процесс обучения
-for episode in range(1000):  # Количество эпизодов
+for episode in range(10000):  # Количество эпизодов
     if episode % 100 == 0:
-        obstacles = [Obstacle() for _ in range(OBSTACLE_QUANTITY)]
-        organism.death_counter = 0
+        organism.reset_counters()
+        obstacles = []
+        for _ in range(OBSTACLE_QUANTITY):
+            obstacles.append(Obstacle(organism, obstacles))
+        foods = []
+        for _ in range(FOOD_QUANTITY):
+            foods.append(Food(obstacles, organism, foods))
         start_time = pygame.time.get_ticks()
     state = organism.get_input_vector(obstacles, foods)
     done = False
@@ -583,7 +689,7 @@ for episode in range(1000):  # Количество эпизодов
         action = choose_action(next_state.clone().detach().unsqueeze(0).requires_grad_(True), model)
 
         # for organism in organisms:
-        done = organism.move(action, obstacles, reward)
+        done = organism.move(action, obstacles, reward, foods)
         reward_value = reward.get()
         pygame.draw.circle(screen, BLUE, (int(organism.x), int(organism.y)), ORGANISM_RADIUS)
 
@@ -603,7 +709,7 @@ for episode in range(1000):  # Количество эпизодов
         # Render input vector
         if organism.input_vector is not None:
             input_text = get_input_text(organism.input_vector, reward_value, episode, loss_item)
-        render_text(screen, input_text, WIDTH - 300, 20)
+        render_text(screen, input_text, screen.get_width() - 400, 10)
 
         # Отрисовка векторов
         vectors_plotter.update(organism, reward_value)
@@ -628,14 +734,14 @@ for episode in range(1000):  # Количество эпизодов
         statistics.update_total_reward(reward_value)
         statistics.total_time = (pygame.time.get_ticks() - start_time) / 1000
         if episode % 100 == 0:
-            statistics.create_episode(episode / 100, organism.death_counter)
-        statistics.update_episode(episode // 100, organism.death_counter)
+            statistics.create_episode(episode // 100 + 1, organism)             
+        statistics.update_episode(episode // 100 + 1, organism)
         statistics.draw_statistics(screen)
 
         if done and episode % 100 == 0:
             print(f"Episode: {episode}!")
             # Сохранение модели
-            torch.save(model.state_dict(), "model.pth")
+            torch.save(model.state_dict(), f"model{episode // 100}.pth")
             
             # Сохранение весов в файл txt
             weights_fc1, weights_fc2, weights_fc3, weights_fc4 = model.get_weights()
