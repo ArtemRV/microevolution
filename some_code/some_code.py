@@ -1,157 +1,69 @@
-# Текстовый вывод
-def render_text(screen, text, x, y):
-    lines = text.split('\n')
-    for i, line in enumerate(lines):
-        img = font.render(line, True, BLACK)
-        screen.blit(img, (x, y + i * 20))
+import pygame
+import torch
+import threading
+import queue
+import time
+import math
 
-def get_input_text(input_vector):
-    text = "Input vector:\n"
-    text += f"food_x: {input_vector[0]:.2f} food_y: {input_vector[1]:.2f}\n"
-    text += f"obstacle1_x: {input_vector[2]:.2f} obstacle1_y: {input_vector[3]:.2f}\n"
-    text += f"obstacle2_x: {input_vector[4]:.2f} obstacle2_y: {input_vector[5]:.2f}\n"
-    text += f"obstacle3_x: {input_vector[6]:.2f} obstacle3_y: {input_vector[7]:.2f}\n"
-    text += f"vx: {input_vector[8]:.2f} vy: {input_vector[9]:.2f}\n"
-    text += f"energy: {input_vector[10]:.2f}\n"
-    text += f"distance_to_boundary: {input_vector[11]:.2f}\n"
-    return text
+# Инициализация Pygame
+pygame.init()
+screen = pygame.display.set_mode((400, 400))
+clock = pygame.time.Clock()
 
-# Render input vector
-if organism.input_vector is not None:
-    input_text = get_input_text(organism.input_vector)
-    render_text(screen, input_text, WIDTH - 300, 20)
+# Очередь для передачи статуса обучения
+status_queue = queue.Queue()
 
+# Функция для обучения нейронной сети
+def train_network(num_epochs, status_queue):
+    for epoch in range(num_epochs):
+        # Здесь будет фактический код обучения на Torch
+        time.sleep(10)  # Симуляция времени на обучение одной эпохи
+        status_queue.put(f"Epoch {epoch + 1}/{num_epochs} complete")  # Обновляем статус
+    status_queue.put("Training complete")
 
+# Функция для запуска обучения в отдельном потоке
+def start_training(num_epochs):
+    training_thread = threading.Thread(target=train_network, args=(num_epochs, status_queue))
+    training_thread.start()
 
+# Основная программа Pygame
+def main_program():
+    num_epochs = 10  # Задаем количество эпох
+    start_training(num_epochs)
 
-# Класс для препятствий
-class Obstacle:
-    def __init__(self):
-        angle = np.random.uniform(0, 2 * np.pi)
-        radius = np.random.uniform(0, RADIUS_DISH - OBSTACLE_RADIUS)
-        self.x = CENTER[0] + radius * np.cos(angle)
-        self.y = CENTER[1] + radius * np.sin(angle)
-        self.vx = np.random.uniform(-2, 2)
-        self.vy = np.random.uniform(-2, 2)
+    angle = 0  # Угол для анимации вращения
 
-    def move(self):
-        # Проверка столкновений с чашкой Петри и другими препятствиями
-        if check_dish_collision(self.x + self.vx, self.y + self.vy, OBSTACLE_RADIUS):
-            angle_rebound = calculata_rebound_angle(self.x, self.y, CENTER[0], CENTER[1], self.vx, self.vy)
-            self.vx = -np.cos(angle_rebound) * np.hypot(self.vx, self.vy)
-            self.vy = -np.sin(angle_rebound) * np.hypot(self.vx, self.vy)
-        for obstacle in obstacles:
-            if obstacle == self:
-                continue
-            if check_collision(self.x + self.vx, self.y + self.vy, OBSTACLE_RADIUS, obstacle.x, obstacle.y, OBSTACLE_RADIUS):
-                angle_rebound = calculata_rebound_angle(self.x, self.y, obstacle.x, obstacle.y, self.vx, self.vy)
-                self.vx = -np.cos(angle_rebound) * np.hypot(self.vx, self.vy)
-                self.vy = -np.sin(angle_rebound) * np.hypot(self.vx, self.vy)
-                angle_rebound = calculata_rebound_angle(obstacle.x, obstacle.y, self.x, self.y, obstacle.vx, obstacle.vy)
-                obstacle.vx = -np.cos(angle_rebound) * np.hypot(obstacle.vx, obstacle.vy)
-                obstacle.vy = -np.sin(angle_rebound) * np.hypot(obstacle.vx, obstacle.vy)
-        self.x += self.vx
-        self.y += self.vy
+    running = True
+    while running:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
 
-    def draw(self, screen):
-        pygame.draw.circle(screen, RED, (int(self.x), int(self.y)), OBSTACLE_RADIUS)
+        # Отрисовка фона
+        screen.fill((255, 255, 255))
 
-# Класс для пищи
-class Food:
-    def __init__(self):
-        angle = np.random.uniform(0, 2 * np.pi)
-        distance = np.random.uniform(0, RADIUS_DISH - FOOD_RADIUS)
-        self.x = CENTER[0] + distance * np.cos(angle)
-        self.y = CENTER[1] + distance * np.sin(angle)
+        # Обработка статуса из очереди
+        while not status_queue.empty():
+            status = status_queue.get()
+            print(status)  # Выводим статус в консоль
+            if status == "Training complete":
+                running = False  # Останавливаем программу после завершения
 
-    def draw(self, screen):
-        pygame.draw.circle(screen, GREEN, (int(self.x), int(self.y)), FOOD_RADIUS)
+        # Анимация вращающегося индикатора
+        center = (200, 200)
+        radius = 50
+        end_pos = (center[0] + radius * math.cos(angle), center[1] + radius * math.sin(angle))
+        pygame.draw.circle(screen, (0, 100, 200), center, radius, 5)
+        pygame.draw.line(screen, (200, 50, 50), center, end_pos, 5)
 
-    def check_eaten(self, organism):
-        # Проверка столкновения между организмом и едой
-        distance = np.hypot(self.x - organism.x, self.y - organism.y)
-        return distance < (FOOD_RADIUS + ORGANISM_RADIUS)
+        # Обновление угла для вращения индикатора
+        angle += 0.1
 
-    def regenerate(self):
-        """Регенерация пищи в новом месте."""
-        angle = np.random.uniform(0, 2 * np.pi)
-        radius = np.random.uniform(0, RADIUS_DISH - FOOD_RADIUS)
-        self.x = CENTER[0] + radius * np.cos(angle)
-        self.y = CENTER[1] + radius * np.sin(angle)
+        # Обновление экрана
+        pygame.display.flip()
+        clock.tick(30)  # 30 FPS
 
+    pygame.quit()
 
-# Оптимизация логики столкновений с использованием сетки
-class Grid:
-    def __init__(self, width, height, cell_size):
-        self.cell_size = cell_size
-        self.cols = width // cell_size
-        self.rows = height // cell_size
-        self.grid = [[[] for _ in range(self.cols)] for _ in range(self.rows)]
-
-    def add_object(self, obj):
-        col, row = int(obj.x // self.cell_size), int(obj.y // self.cell_size)
-        if 0 <= col < self.cols and 0 <= row < self.rows:
-            self.grid[row][col].append(obj)
-
-    def remove_object(self, obj):
-        col, row = int(obj.x // self.cell_size), int(obj.y // self.cell_size)
-        if 0 <= col < self.cols and 0 <= row < self.rows:
-            self.grid[row][col].remove(obj)
-
-    def get_nearby_objects(self, x, y, radius):
-        col, row = int(x // self.cell_size), int(y // self.cell_size)
-        nearby_objects = []
-        for r in range(max(0, row - 1), min(self.rows, row + 2)):
-            for c in range(max(0, col - 1), min(self.cols, col + 2)):
-                nearby_objects.extend(self.grid[r][c])
-        return [obj for obj in nearby_objects if np.hypot(obj.x - x, obj.y - y) < radius]
-    
-
-obstacles = [Obstacle() for _ in range(OBSTACLE_QUANTITY)]
-foods = [Food() for _ in range(FOOD_QUANTITY)]
-grid = Grid(WIDTH, HEIGHT, 100)  # Создание сетки для оптимизации столкновений
-
-
-
-
-# Больше не используется
-class MatrixPlotter:
-    def __init__(self, matrix):
-        self.matrix = matrix
-        width, height = self.matrix.shape
-        self.width = width
-        self.height = height
-        self.colors = self.generate_colors()
-        self.loss = []
-        self.loss_max = 200
-
-    def generate_colors(self):
-        return [(random.randint(0, 255), random.randint(0, 255), random.randint(0, 255)) for _ in range(self.width)]
-
-    def update(self, matrix):
-        self.matrix = matrix
-
-    def draw(self, screen):
-        shift_x = 10
-        shift_y = 10
-        ratio_x = 20
-        ratio_y = 4
-        for i in range(self.width):
-            for j in range(self.height - 1):
-                height1 = self.matrix[i][j] * 10 + (ratio_y * (i + 1)) + shift_y
-                height2 = self.matrix[i][j + 1] * 10 + (ratio_y * (i + 1)) + shift_y
-                width1 = ratio_x * j + shift_x
-                width2 = ratio_x * (j + 1) + shift_x
-                pygame.draw.line(screen, self.colors[i], (width1, height1), (width2, height2), 2)
-
-    def update_loss(self, loss):
-        if len(self.loss) > self.loss_max:
-            self.loss.pop(0)
-        self.loss.append(loss)
-
-    def draw_loss(self, screen):
-        shift_x = 10
-        shift_y = screen.get_height() - 200
-        for i, loss_item in enumerate(self.loss):
-            pygame.draw.line(screen, RED, (i + shift_x, shift_y), (i + shift_x, shift_y - loss_item), 2)
-
+if __name__ == "__main__":
+    main_program()

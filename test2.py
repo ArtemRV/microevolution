@@ -1,82 +1,84 @@
 import pygame
-import numpy as np
+import sympy as sp
 
 # Инициализация Pygame
 pygame.init()
 
-# Задаем размеры окна
-width, height = 800, 600
-screen = pygame.display.set_mode((width, height), pygame.RESIZABLE)
+# Настройки экрана
+screen = pygame.display.set_mode((600, 400))
+pygame.display.set_caption("Math Equation Evaluator")
+clock = pygame.time.Clock()
+font = pygame.font.Font(None, 32)
 
 # Цвета
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
-GRAY = (200, 200, 200)
-# Цвета от красного до зеленого
-COLORS = [(255 - i * 30, i * 30, 0) for i in range(7)]
+BLUE = (0, 0, 255)
 
-# Функция для отрисовки нейрона
-def draw_neuron(x, y, radius):
-    pygame.draw.circle(screen, BLACK, (x, y), radius, 2)
+# Поле ввода
+input_box = pygame.Rect(50, 50, 500, 32)
+color_inactive = pygame.Color('lightskyblue3')
+color_active = pygame.Color('dodgerblue2')
+color = color_inactive
+active = False
+text = ''
+result = ''
 
-# Функция для отрисовки связи между нейронами
-def draw_connection(x1, y1, x2, y2, thickness):
-    pygame.draw.line(screen, COLORS[thickness - 1], (x1, y1), (x2, y2), 1)
-    # pygame.draw.line(screen, COLORS[thickness - 1], (x1, y1), (x2, y2), thickness)
+# Функция для вычисления уравнения
+def evaluate_equation(equation, variables):
+    try:
+        # Преобразуем строку в выражение SymPy
+        expr = sp.sympify(equation)
+        
+        # Вычисляем значение выражения с заданными переменными
+        result = expr.evalf(subs=variables)
+        return result
+    except (sp.SympifyError, TypeError):
+        return "Ошибка в уравнении."
 
-# Загрузить матрицу из файла weights_fc1.txt
-matrix = np.loadtxt("weights_fc1.txt")
+def main():
+    global active, color, text, result
 
-# Сортируем значения матрицы от большего к меньшему
-sorted_values = np.sort(matrix.flatten())[::-1]
+    running = True
+    while running:
+        screen.fill(WHITE)
 
-# Определяем диапазон значений и разбиваем его на 7 равных частей
-min_val, max_val = sorted_values.min(), sorted_values.max()
-intervals = np.linspace(min_val, max_val, 8)  # 7 интервалов
+        # Обработка событий
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                # Проверка клика по полю ввода
+                if input_box.collidepoint(event.pos):
+                    active = not active
+                else:
+                    active = False
+                color = color_active if active else color_inactive
+            elif event.type == pygame.KEYDOWN:
+                if active:
+                    if event.key == pygame.K_RETURN:
+                        # Пример: вводим значения переменных
+                        variables = {"x": 2, "y": 3}  # Замените нужными значениями
+                        result = evaluate_equation(text, variables)
+                        text = ''
+                    elif event.key == pygame.K_BACKSPACE:
+                        text = text[:-1]
+                    else:
+                        text += event.unicode
 
-# Функция для определения толщины линии в зависимости от веса
-def get_thickness(value):
-    for i in range(7):
-        if intervals[i] <= value < intervals[i + 1]:
-            return i + 1
-    return 1  # Если значение ниже минимального интервала
+        # Рендеринг текста
+        txt_surface = font.render(text, True, BLACK)
+        screen.blit(txt_surface, (input_box.x+5, input_box.y+5))
+        pygame.draw.rect(screen, color, input_box, 2)
 
-# Основной цикл Pygame
-running = True
-while running:
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            running = False
+        # Отображение результата
+        result_surface = font.render(f"Результат: {result}", True, BLUE)
+        screen.blit(result_surface, (50, 100))
 
-    screen.fill(WHITE)  # Очищаем экран
+        pygame.display.flip()
+        clock.tick(30)
 
-    # Координаты для расположения нейронов (пример)
-    matrix_width, matrix_height = matrix.shape
-    neuron_positions1 = [(10 + i * 50, 10) for i in range(matrix_width)]
-    neuron_positions2 = [(10 + j * 50, 500) for j in range(matrix_height)]
+    pygame.quit()
 
-    # Рисуем нейроны и связи
-    for i, (x1, y1) in enumerate(neuron_positions1):
-        for j, (x2, y2) in enumerate(neuron_positions2):
-            if i != j:
-                # Получаем вес (значение матрицы) для данной связи
-                weight = matrix[i % matrix_width, j % matrix_height]
-                thickness = get_thickness(weight)
-                draw_connection(x1, y1, x2, y2, thickness)
-
-    for i, (x1, y1) in enumerate(neuron_positions1):
-        # Рисуем нейрон
-        neuron_weight = sum(matrix[i % matrix_width])  # Пример суммарного веса нейрона
-        radius = max(10, neuron_weight // 100)  # Пример радиуса нейрона
-        draw_neuron(x1, y1, radius)
-    
-    for j, (x2, y2) in enumerate(neuron_positions2):
-        # Рисуем нейрон
-        neuron_weight = sum(matrix[:, j % matrix_height])  # Пример суммарного веса нейрона
-        radius = max(10, neuron_weight // 100)
-        draw_neuron(x2, y2, radius)
-
-    pygame.display.flip()  # Обновляем экран
-
-# Закрываем Pygame
-pygame.quit()
+# Запуск основной функции
+main()

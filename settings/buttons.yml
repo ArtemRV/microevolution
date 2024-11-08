@@ -1,0 +1,47 @@
+main_buttons:
+  - x: -110
+    y: 10
+    width: 100
+    height: 50
+    text: Menu
+    color: LIGHT_BLUE
+    hover_color: DARK_BLUE
+    text_color: BLACK
+    hover_text_color: WHITE
+    font: 18
+    action: menu
+  - x: -110
+    y: 70
+    width: 100
+    height: 50
+    text: Pause
+    color: LIGHT_BLUE
+    hover_color: DARK_BLUE
+    text_color: BLACK
+    hover_text_color: WHITE
+    font: 18
+    action: pause
+
+menu_buttons:
+  - x: -110
+    y: 10
+    width: 100
+    height: 50
+    text: Game
+    color: LIGHT_BLUE
+    hover_color: DARK_BLUE
+    text_color: BLACK
+    hover_text_color: WHITE
+    font: 18
+    action: game
+  - x: -110
+    y: 70
+    width: 100
+    height: 50
+    text: Quit
+    color: LIGHT_BLUE
+    hover_color: DARK_BLUE
+    text_color: BLACK
+    hover_text_color: WHITE
+    font: 18
+    action: quit

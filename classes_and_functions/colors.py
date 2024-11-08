@@ -64,10 +64,12 @@ class Colors:
     ONYX = (53, 57, 53)
 
     # Shades of Blue
-    AZURE = (240, 255, 255)
+    AZURE = (0, 127, 255)
     BABY_BLUE = (137, 207, 240)
     BLUE = (0, 0, 255)
     BLUE_GRAY = (115, 147, 179)
+    LIGHT_BLUE_GRAY = (68, 118, 132)
+    DARK_BLUE_GRAY = (15, 65, 79)
     BLUE_GREEN = (8, 143, 143)
     BRIGHT_BLUE = (0, 150, 255)
     CADET_BLUE = (95, 158, 160)

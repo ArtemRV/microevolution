@@ -131,28 +131,43 @@ class Organism:
         self.obstacle_collision_counter = 0
         self.energy_loss_counter = 0
 
-    def get_input_vector(self, dish, obstacles, foods):
-        """Generate the input vector for the neural network."""
-        closest_food = sorted(foods, key=lambda food: np.hypot(self.x - food.x, self.y - food.y))[:3]
-        closest_obstacles = sorted(obstacles, key=lambda obstacle: np.hypot(self.x - obstacle.x, self.y - obstacle.y))[:3]
+    # Generate the input vector for the neural network
+    def get_input_vector(self, dish, obstacles=None, foods=None):
+        self.input_vector = []
+        if foods is not None:
+            self.closest_food = sorted(foods, key=lambda food: np.hypot(self.x - food.x, self.y - food.y))[:3]
+            for food in self.closest_food:
+                self.input_vector.append(food.x - self.x)
+                self.input_vector.append(food.y - self.y)
+
+        self.input_vector.append(self.vx)
+        self.input_vector.append(self.vy)
+        self.input_vector.append(np.hypot(self.x, self.y) + self.radius - dish.radius)
+        self.input_vector.append(self.energy)
+
+        if obstacles is not None:
+            closest_obstacles = sorted(obstacles, key=lambda obstacle: np.hypot(self.x - obstacle.x, self.y - obstacle.y))[:3]
+            self.closest_obstacles = closest_obstacles
+            for obstacle in closest_obstacles:
+                self.input_vector.append(self.x - obstacle.x)
+                self.input_vector.append(self.y - obstacle.y)
+                self.input_vector.append(obstacle.vx)
+                self.input_vector.append(obstacle.vy)
         
-        self.closest_food = closest_food
-        self.closest_obstacles = closest_obstacles
-        
-        self.input_vector = np.array([
-            closest_food[0].x - self.x, closest_food[0].y - self.y,
-            closest_food[1].x - self.x, closest_food[1].y - self.y,
-            closest_food[2].x - self.x, closest_food[2].y - self.y,
-            self.vx, self.vy,
-            np.hypot(self.x, self.y) + self.radius - dish.radius,
-            self.energy,
-            self.x - closest_obstacles[0].x, self.y - closest_obstacles[0].y,
-            closest_obstacles[0].vx, closest_obstacles[0].vy,
-            self.x - closest_obstacles[1].x, self.y - closest_obstacles[1].y,
-            closest_obstacles[1].vx, closest_obstacles[1].vy,
-            self.x - closest_obstacles[2].x, self.y - closest_obstacles[2].y,
-            closest_obstacles[2].vx, closest_obstacles[2].vy
-        ])
+        # self.input_vector = np.array([
+        #     self.closest_food[0].x - self.x, self.closest_food[0].y - self.y,
+        #     self.closest_food[1].x - self.x, self.closest_food[1].y - self.y,
+        #     self.closest_food[2].x - self.x, self.closest_food[2].y - self.y,
+            # self.vx, self.vy,
+            # np.hypot(self.x, self.y) + self.radius - dish.radius,
+            # self.energy,
+        #     self.x - closest_obstacles[0].x, self.y - closest_obstacles[0].y,
+        #     closest_obstacles[0].vx, closest_obstacles[0].vy,
+        #     self.x - closest_obstacles[1].x, self.y - closest_obstacles[1].y,
+        #     closest_obstacles[1].vx, closest_obstacles[1].vy,
+        #     self.x - closest_obstacles[2].x, self.y - closest_obstacles[2].y,
+        #     closest_obstacles[2].vx, closest_obstacles[2].vy
+        # ])
         return torch.tensor(self.input_vector, dtype=torch.float32)
 
     def move(self, action, dish, obstacles, reward, foods):

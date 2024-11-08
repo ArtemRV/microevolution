@@ -8,6 +8,9 @@ import torch.optim as optim
 from collections import deque, OrderedDict
 from classes_and_functions.objects import Grid, Dish, Organism, Obstacle, Food
 from classes_and_functions.colors import Colors
+from classes_and_functions.menu import menu
+from classes_and_functions.button import load_button_settings
+from classes_and_functions.charts import MatrixPlotter, VectorsPlotter
 
 pygame.init()
 torch.autograd.set_detect_anomaly(True)
@@ -71,136 +74,10 @@ LEARNING_RATE = 0.0001
 EPSILON = 0.1  # Для epsilon-greedy стратегии
 GAMMA = 0.99  # Фактор дисконтирования
 TAU = 0.005  # Скорость копирования весов основной сети в target сеть
-        
 
-class MatrixPlotter:
-    def __init__(self, matrix):
-        self.matrix = matrix
-        width, height = self.matrix.shape
-        self.width = width
-        self.height = height
-        self.colors = self.generate_colors()
-        self.loss = []
-        self.max_loss_count = 200
-        self.average_loss = 0
-        self.average_loss_max = 0
-
-    def generate_colors(self):
-        return [(random.randint(0, 255), random.randint(0, 255), random.randint(0, 255)) for _ in range(self.width)]
-
-    def update(self, matrix):
-        self.matrix = matrix
-
-    def draw(self, screen):
-        shift_x = 10
-        shift_y = 10
-        ratio_x = 20
-        ratio_y = 4
-        for i in range(self.width):
-            for j in range(self.height - 1):
-                height1 = self.matrix[i][j] * 10 + (ratio_y * (i + 1)) + shift_y
-                height2 = self.matrix[i][j + 1] * 10 + (ratio_y * (i + 1)) + shift_y
-                width1 = ratio_x * j + shift_x
-                width2 = ratio_x * (j + 1) + shift_x
-                pygame.draw.line(screen, self.colors[i], (width1, height1), (width2, height2), 2)
-
-    def update_loss(self, loss):
-        if len(self.loss) > self.max_loss_count:
-            self.loss.pop(0)
-        self.loss.append(loss)
-        self.average_loss = np.log(sum(self.loss) / len(self.loss)) * 20
-        if self.average_loss > self.average_loss_max:
-            self.average_loss_max = self.average_loss
-
-    def draw_loss(self, screen):
-        shift_x = 10
-        plotter_shift_x = 30
-        shift_y = screen.get_height() - 300
-        for i, loss_item in enumerate(self.loss):
-            if loss_item > 1:
-                loss_value = np.log(loss_item) * 20
-            else:
-                loss_value = loss_item
-            pygame.draw.line(screen, colors.RED, (i + shift_x + plotter_shift_x, shift_y), (i + shift_x + plotter_shift_x, shift_y - loss_value), 1)
-        # Добавить шкалу логарифмического масштаба
-        render_text(screen, "0", shift_x, shift_y)
-        pygame.draw.line(screen, colors.BLACK, (shift_x + plotter_shift_x, shift_y), (shift_x + plotter_shift_x + self.max_loss_count, shift_y), 1)
-        render_text(screen, "10", shift_x, shift_y - 46)
-        pygame.draw.line(screen, colors.BLACK, (shift_x + plotter_shift_x, shift_y - 46), (shift_x + plotter_shift_x + self.max_loss_count, shift_y - 46), 1)
-        render_text(screen, "100", shift_x, shift_y - 92)
-        pygame.draw.line(screen, colors.BLACK, (shift_x + plotter_shift_x, shift_y - 92), (shift_x + plotter_shift_x + self.max_loss_count, shift_y - 92), 1)
-        render_text(screen, "1000", shift_x, shift_y - 138)
-        pygame.draw.line(screen, colors.BLACK, (shift_x + plotter_shift_x, shift_y - 138), (shift_x + plotter_shift_x + self.max_loss_count, shift_y - 138), 1)
-        # Отрисовка среднего значения
-        render_text(screen, f"Av loss: {round(self.average_loss, 2)}", shift_x + plotter_shift_x + self.max_loss_count + 5, shift_y - self.average_loss)
-        render_text(screen, f"Max av loss: {round(self.average_loss_max, 2)}", shift_x + plotter_shift_x + self.max_loss_count + 5, shift_y - self.average_loss_max - 10)
-        pygame.draw.line(screen, colors.AZURE, (shift_x + plotter_shift_x, shift_y - self.average_loss), (shift_x + plotter_shift_x + self.max_loss_count, shift_y - self.average_loss), 1)
-        pygame.draw.line(screen, colors.BLUE, (shift_x + plotter_shift_x, shift_y - self.average_loss_max), (shift_x + plotter_shift_x + self.max_loss_count, shift_y - self.average_loss_max), 1)  
-
-
-class VectorsPlotter:
-    def __init__(self):
-        self.vectors = []
-        self.start = []
-        self.rewards = []
-
-    def update(self, organism, reward):
-        self.vectors.append([organism.vx, organism.vy])
-        if len(self.start) == 0:
-            self.start = [organism.x, organism.y]
-        self.rewards.append(reward)
-
-    def draw_vectors_plotter(self, screen):
-        a = 20
-        x = 100
-        draw_center = [screen.get_width() - 400, screen.get_height() // 2 - 100]
-        for i, vector in enumerate(self.vectors):
-            shift_x = i // a * x
-            shift_y = i * a - (i // a) * a**2
-            start_pos = [draw_center[0] + shift_x, draw_center[1] + shift_y]
-            end_pos = [draw_center[0] + int(vector[0] * 10)  + shift_x, draw_center[1] + int(vector[1] * 10) + shift_y]
-            pygame.draw.line(screen, colors.RED, start_pos, end_pos, 2)
-            pygame.draw.circle(screen, colors.BLUE, end_pos, 5)
-            render_text(screen, f"Rew: {round(self.rewards[i], 2)}", draw_center[0] + 20  + shift_x, draw_center[1] + shift_y)
-
-    def reset(self):
-        self.vectors = []
-        self.start = []
-        self.rewards = []
-
-    def draw_vectors(self, organism, surface, dish):
-        shift = organism.radius + 3
-        reward_vectors = []
-
-        # Предварительные вычисления для всех направлений
-        for alfa in range(0, 360, 6):
-            reward = 0
-            radian_alfa = np.radians(alfa)
-            vx = np.cos(radian_alfa)
-            vy = np.sin(radian_alfa)
-            
-            # Подсчет награды от пищи и препятствий
-            for i, food in enumerate(organism.closest_food):
-                reward += organism.food_reward(food, i, organism.old_x + vx, organism.old_y + vy, vx, vy)
-            for i, obstacle in enumerate(organism.closest_obstacles):
-                reward += organism.obstacle_reward(obstacle, i, organism.old_x + vx, organism.old_y + vy, vx, vy)
-                    
-            # dish reward
-            overlap = organism.dish_overlap(vx, vy, dish)
-            reward += organism.dish_reward(overlap, dish)
-            
-            # Определение цвета и направления
-            color = (0, 255, 0, 127) if reward >= 0 else (255, 0, 0, 127)
-            reward_vectors.append((vx * abs(reward), vy * abs(reward), color))
-
-        # Рисование всех векторов
-        for idx, (vx, vy, color) in enumerate(reward_vectors):
-            radian_alfa = np.radians(idx * 6)
-            x = organism.x + shift * np.cos(radian_alfa)
-            y = organism.y + shift * np.sin(radian_alfa)
-            shift_x = x + dish.x
-            shift_y = y + dish.y
-            pygame.draw.line(surface, color, (shift_x, shift_y), (shift_x + vx, shift_y + vy), 1)
+# Buttons
+MENU = False
+PAUSE = False
 
 
 # Определение архитектуры нейронной сети для DQN
@@ -353,18 +230,18 @@ def render_text(screen, text, x, y):
 
 def get_input_text(input_vector, reward, episode, loss_item):
     text = "Input vector:\n"
-    text += f"food_x: {input_vector[0]:.2f} food_y: {input_vector[1]:.2f}\n"
-    text += f"food_x: {input_vector[2]:.2f} food_y: {input_vector[3]:.2f}\n"
-    text += f"food_x: {input_vector[4]:.2f} food_y: {input_vector[5]:.2f}\n"
-    text += f"vx: {input_vector[6]:.2f} vy: {input_vector[7]:.2f}\n"
+    text += f"food_x: {input_vector[0]:.2f}     food_y: {input_vector[1]:.2f}\n"
+    text += f"food_x: {input_vector[2]:.2f}     food_y: {input_vector[3]:.2f}\n"
+    text += f"food_x: {input_vector[4]:.2f}     food_y: {input_vector[5]:.2f}\n"
+    text += f"vx: {input_vector[6]:.2f}         vy: {input_vector[7]:.2f}\n"
     text += f"distance_to_boundary: {input_vector[8]:.2f}\n"
     text += f"energy: {input_vector[9]:.2f}\n"
-    text += f"obstacle1_x: {input_vector[10]:.2f} obstacle1_y: {input_vector[11]:.2f}\n"
-    text += f"obstacle1_vx: {input_vector[12]:.2f} obstacle1_vy: {input_vector[13]:.2f}\n"
-    text += f"obstacle2_x: {input_vector[14]:.2f} obstacle2_y: {input_vector[15]:.2f}\n"
-    text += f"obstacle2_vx: {input_vector[16]:.2f} obstacle2_vy: {input_vector[17]:.2f}\n"
-    text += f"obstacle3_x: {input_vector[18]:.2f} obstacle3_y: {input_vector[19]:.2f}\n"
-    text += f"obstacle3_vx: {input_vector[20]:.2f} obstacle3_vy: {input_vector[21]:.2f}\n"
+    text += f"obstacle1_x: {input_vector[10]:.2f}   obstacle1_y: {input_vector[11]:.2f}\n"
+    text += f"obstacle1_vx: {input_vector[12]:.2f}  obstacle1_vy: {input_vector[13]:.2f}\n"
+    text += f"obstacle2_x: {input_vector[14]:.2f}   obstacle2_y: {input_vector[15]:.2f}\n"
+    text += f"obstacle2_vx: {input_vector[16]:.2f}  obstacle2_vy: {input_vector[17]:.2f}\n"
+    text += f"obstacle3_x: {input_vector[18]:.2f}   obstacle3_y: {input_vector[19]:.2f}\n"
+    text += f"obstacle3_vx: {input_vector[20]:.2f}  obstacle3_vy: {input_vector[21]:.2f}\n"
     text += f"Reward: {reward:.2f}\n"
     text += f"Episode: {episode}\n"
     text += f"Loss: {str(loss_item)}\n"
@@ -375,10 +252,12 @@ def choose_action(state, model):
         # Случайное действие (эксплорейшн)
         return torch.FloatTensor(1, OUTPUT_DIM).uniform_(-1, 1)
     else:
-        # Выбор действия на основе Q-значений (эксплуатация)
-        with torch.no_grad():
-            action = model(state)
-            return action.view(1, -1)
+        return model_action(state, model)
+        
+def model_action(state, model):
+    with torch.no_grad():
+        action = model(state)
+        return action.view(1, -1)
         
 def replay(memory, model, optimizer, loss_fn, batch_size):
     if len(memory) < batch_size:
@@ -424,6 +303,19 @@ def draw_all(screen, dish, obstacles, foods, organism):
     organism.draw(screen, colors, dish)
     dish.draw(screen, colors)
 
+def menu_status():
+    global MENU
+    MENU = not MENU
+
+def pause():
+    global PAUSE
+    PAUSE = not PAUSE
+
+ACTIONS = {
+    "menu": menu_status,
+    "pause": pause
+}
+
 grid = Grid(GRID_SIZE)
 
 # Инициализация DQN модели, оптимизатора и функции потерь
@@ -436,7 +328,10 @@ loss_fn = nn.MSELoss()
 batch_size = 80  # Размер батча для обучения
 memory = deque(maxlen=batch_size * 20)  # Опыт для реплея
 
+buttons = load_button_settings(colors, "settings/buttons.yml", ACTIONS, 'main_buttons')
+
 def main():
+    settings = menu(screen, colors, clock)
     dish = Dish(DISH_RADIUS, DISH_COLLISION_PENALTY, DISH_PENALTY_MAX, screen)
     organism = Organism(dish, ORGANISM_RADIUS, SPEED, COLOR, INITIAL_ENERGY, ENERGY_LOSS_RATE, SPEED_ENERGY_LOSS_MULTIPLIER, ENERGY_DEPLETION_PENALTY)
     reward = Reward()
@@ -454,6 +349,7 @@ def main():
             for _ in range(FOOD_QUANTITY):
                 foods.append(Food(FOOD_RADIUS, FOOD_ENERGY, dish, organism, obstacles, foods, FOOD_REWARD))
             start_time = pygame.time.get_ticks()
+            paused_time = 0
         state = organism.get_input_vector(dish, obstacles, foods)
         done = False
         reward.reset()
@@ -466,79 +362,124 @@ def main():
                     pygame.quit()
                     sys.exit()
                     done = False
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_m:
+                        menu_status()
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    for button in buttons:
+                        if button.is_clicked(event):
+                            button.action()
+                            break
             
-            screen.fill(colors.WHITE)
-            surface = pygame.Surface((screen.get_width(), screen.get_height()), pygame.SRCALPHA)
+            if PAUSE:
+                if paused_time == 0:
+                    paused_time = pygame.time.get_ticks()
 
-            for obstacle in obstacles:
-                obstacle.move(dish, grid)
+                # screen.fill(colors.WHITE)
+                for button in buttons:
+                    button.update_rect(screen.get_width())
+                    button.check_hover()
+                    button.draw(screen)
+                
+                if MENU:
+                    settings = menu(screen, colors, clock, settings)
+                    menu_status()
+                pygame.display.flip()
+            else:
+                if paused_time != 0:
+                    start_time += pygame.time.get_ticks() - paused_time
+                    paused_time = 0
 
-            # Выбор действия
-            next_state = organism.get_input_vector(dish, obstacles, foods)
-            action = choose_action(next_state.clone().detach().unsqueeze(0).requires_grad_(True), model)
+                screen.fill(colors.WHITE)
+                surface = pygame.Surface((screen.get_width(), screen.get_height()), pygame.SRCALPHA)
+                
+                for button in buttons:
+                    button.update_rect(screen.get_width())
+                    button.check_hover()
+                    button.draw(screen)
+                
+                if MENU:
+                    settings = menu(screen, colors, clock, settings)
+                    menu_status()
 
-            # for organism in organisms:
-            done = organism.move(action, dish, obstacles, reward, foods)
+                for obstacle in obstacles:
+                    obstacle.move(dish, grid)
 
-            reward_value = reward.get()
+                # Выбор действия
+                next_state = organism.get_input_vector(dish, obstacles, foods)
+                if settings['Learning']:
+                    action = choose_action(next_state.clone().detach().unsqueeze(0).requires_grad_(True), model)
+                else:
+                    action = model_action(next_state.clone().detach().unsqueeze(0).requires_grad_(True), model)
 
-            if DRAW_ALL:
-                draw_all(screen, dish, obstacles, foods, organism)
+                # for organism in organisms:
+                done = organism.move(action, dish, obstacles, reward, foods)
 
-            # Сохранение опыта в буфер
-            memory.append((state, action, reward_value, next_state, done))
+                reward_value = reward.get()
 
-            # Обучение модели
-            if len(memory) % batch_size == 0 or done:
-                loss_item = replay(memory, model, optimizer, loss_fn, batch_size)
-                if len(memory) == memory.maxlen:
-                    memory.clear()
+                if DRAW_ALL:
+                    draw_all(screen, dish, obstacles, foods, organism)
 
-            state = next_state
+                # Сохранение опыта в буфер
+                if settings['Learning']:
+                    memory.append((state, action, reward_value, next_state, done))
 
-            # Render input vector
-            if organism.input_vector is not None:
-                input_text = get_input_text(organism.input_vector, reward_value, episode, loss_item)
-            render_text(screen, input_text, 10, 10)
+                    # Обучение модели
+                    if len(memory) % batch_size == 0 or done:
+                        loss_item = replay(memory, model, optimizer, loss_fn, batch_size)
+                        if len(memory) == memory.maxlen:
+                            memory.clear()
 
-            # Отрисовка векторов
-            vectors_plotter.update(organism, reward_value)
-            vectors_plotter.draw_vectors_plotter(screen)
-            vectors_plotter.draw_vectors(organism, surface, dish)
-            if len(memory) % batch_size == 0 or done:
-                vectors_plotter.reset()
+                state = next_state
 
-            # Отриосвка потерь
-            if loss_item != None and (len(memory) % batch_size == 0 or done):
-                matrix_plotter.update_loss(loss_item)
-            matrix_plotter.draw_loss(screen)
+                # Render input vector
+                if settings['Input vector']:
+                    if organism.input_vector is not None:
+                        input_text = get_input_text(organism.input_vector, reward_value, episode, loss_item)
+                    render_text(screen, input_text, 10, 10)
 
-            # Отрисовка весов
-            # matrix_plotter.update(model.get_weights()[2])
-            # matrix_plotter.draw(screen)
+                # Отрисовка векторов
+                if settings['Vectors']:
+                    vectors_plotter.update(organism, reward_value)
+                    vectors_plotter.draw_vectors_plotter(screen, colors, font)
+                    vectors_plotter.draw_vectors(organism, surface, dish)
+                    if len(memory) % batch_size == 0 or done:
+                        vectors_plotter.reset()
 
-            # Отрисовка наград
-            reward.draw(screen)
+                # Отриосвка потерь
+                if settings['Loss']:
+                    if loss_item != None and (len(memory) % batch_size == 0 or done):
+                        matrix_plotter.update_loss(loss_item)
+                    matrix_plotter.draw_loss(screen, colors, font)
 
-            # Отрисовка счетчика эпизодов
-            statistics.update_energy_max(organism.energy)
-            statistics.update_total_reward(reward.get())
-            statistics.total_time = (pygame.time.get_ticks() - start_time) / 1000
-            if episode % 100 == 0:
-                statistics.create_episode(episode // 100 + 1, organism)             
-            statistics.update_episode(episode // 100 + 1, organism)
-            statistics.draw_statistics(screen)
+                # Отрисовка весов
+                # matrix_plotter.update(model.get_weights()[2])
+                # matrix_plotter.draw(screen)
 
-            if done and episode % 100 == 0:
-                print(f"Episode: {episode}!")
-                # Сохранение модели
-                torch.save(model.state_dict(), f"model{episode // 100}.pth")
+                # Отрисовка наград
+                if settings['Reward']:
+                    reward.draw(screen)
 
-            reward.reset()
+                # Обновление и отрисовка статистики
+                statistics.update_energy_max(organism.energy)
+                statistics.update_total_reward(reward.get())
+                statistics.total_time = (pygame.time.get_ticks() - start_time) / 1000
+                if episode % 100 == 0:
+                    statistics.create_episode(episode // 100 + 1, organism)
+                statistics.update_episode(episode // 100 + 1, organism)
+                if settings['Statistics']:
+                    statistics.draw_statistics(screen)
 
-            screen.blit(surface, (0, 0))
-            pygame.display.flip()
-            # clock.tick(60)  # Ограничение FPS
+                if done and episode % 100 == 0:
+                    print(f"Episode: {episode}!")
+                    # Сохранение модели
+                    torch.save(model.state_dict(), f"model{episode // 100}.pth")
+
+                reward.reset()
+
+                screen.blit(surface, (0, 0))
+                pygame.display.flip()
+                # clock.tick(60)  # Ограничение FPS
 
 if __name__ == "__main__":
     main()

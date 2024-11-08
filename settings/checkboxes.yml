@@ -1,0 +1,117 @@
+checkboxes:
+  - x: -300
+    y: 10
+    size: 40
+    text: Learning
+    color: LIGHT_BLUE_GRAY
+    hover_color: DARK_BLUE_GRAY
+    check_color: MUSTARD_YELLOW
+    text_color: BLACK
+    font: 18
+    checked: true
+    active: true
+    action: learning
+
+  - x: -300
+    y: 60
+    size: 40
+    text: Input vector
+    color: LIGHT_BLUE_GRAY
+    hover_color: DARK_BLUE_GRAY
+    check_color: MUSTARD_YELLOW
+    text_color: BLACK
+    font: 18
+    checked: true
+    active: true
+    action: input_vector
+
+  - x: -300
+    y: 110
+    size: 40
+    text: Vectors
+    color: LIGHT_BLUE_GRAY
+    hover_color: DARK_BLUE_GRAY
+    check_color: MUSTARD_YELLOW
+    text_color: BLACK
+    font: 18
+    checked: true
+    active: true
+    action: vectors
+
+  - x: -300
+    y: 160
+    size: 40
+    text: Loss
+    color: LIGHT_BLUE_GRAY
+    hover_color: DARK_BLUE_GRAY
+    check_color: MUSTARD_YELLOW
+    text_color: BLACK
+    font: 18
+    checked: true
+    active: true
+    action: loss
+
+  - x: -300
+    y: 210
+    size: 40
+    text: Reward
+    color: LIGHT_BLUE_GRAY
+    hover_color: DARK_BLUE_GRAY
+    check_color: MUSTARD_YELLOW
+    text_color: BLACK
+    font: 18
+    checked: true
+    active: true
+    action: reward
+
+  - x: -300
+    y: 260
+    size: 40
+    text: Statistics
+    color: LIGHT_BLUE_GRAY
+    hover_color: DARK_BLUE_GRAY
+    check_color: MUSTARD_YELLOW
+    text_color: BLACK
+    font: 18
+    checked: true
+    active: true
+    action: statistics
+
+  - x: -500
+    y: 10
+    size: 40
+    text: Food
+    color: LIGHT_BLUE_GRAY
+    hover_color: DARK_BLUE_GRAY
+    check_color: MUSTARD_YELLOW
+    text_color: BLACK
+    font: 18
+    checked: true
+    active: true
+    action: food
+
+  - x: -500
+    y: 60
+    size: 40
+    text: 3 nearest food
+    color: LIGHT_BLUE_GRAY
+    hover_color: DARK_BLUE_GRAY
+    check_color: MUSTARD_YELLOW
+    text_color: BLACK
+    font: 18
+    checked: true
+    active: true
+    action: 3_nearest_food
+
+  - x: -500
+    y: 110
+    size: 40
+    text: Obstacles
+    color: LIGHT_BLUE_GRAY
+    hover_color: DARK_BLUE_GRAY
+    check_color: MUSTARD_YELLOW
+    text_color: BLACK
+    font: 18
+    checked: true
+    active: true
+    action: obstacles
