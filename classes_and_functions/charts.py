@@ -1,6 +1,7 @@
 import pygame
 import random
 import numpy as np
+from collections import OrderedDict
 from classes_and_functions.colors import Colors
 
 # font = pygame.font.SysFont(None, 18)
@@ -142,6 +143,87 @@ class VectorsPlotter:
             shift_x = x + dish.x
             shift_y = y + dish.y
             pygame.draw.line(surface, color, (shift_x, shift_y), (shift_x + vx, shift_y + vy), 1)
+
+
+class Statistics:
+    def __init__(self):
+        self.episode = OrderedDict()
+        self.energy_max = 0
+        self.total_reward = 0
+        self.total_time = 0
+        self.max_episodes = 9
+
+    def update_energy_max(self, energy):
+        if energy > self.energy_max:
+            self.energy_max = energy
+
+    def update_total_reward(self, reward):
+        self.total_reward += reward
+
+    def reset(self):
+        self.energy_max = 0
+        self.total_reward = 0
+        
+    def create_episode(self, episode, organism):
+        self.reset()
+        self.delete_episode()
+        self.episode[episode] = {
+            'energy max': self.energy_max,
+            'food eaten': organism.food_eaten,
+            'death counter': organism.death_counter,
+            'dish collision counter': organism.dish_collision_counter,
+            'obstacle collision counter': organism.obstacle_collision_counter,
+            'energy loss counter': organism.energy_loss_counter,
+            'reward': self.total_reward,
+            'time': self.total_time
+        }
+
+    def update_episode(self, episode, organism):
+        self.episode[episode]['energy max'] = self.energy_max
+        self.episode[episode]['food eaten'] = organism.food_eaten
+        self.episode[episode]['death counter'] = organism.death_counter
+        self.episode[episode]['dish collision counter'] = organism.dish_collision_counter
+        self.episode[episode]['obstacle collision counter'] = organism.obstacle_collision_counter
+        self.episode[episode]['energy loss counter'] = organism.energy_loss_counter
+        self.episode[episode]['reward'] = self.total_reward
+        self.episode[episode]['time'] = self.total_time
+
+    def delete_episode(self):
+        if len(self.episode) > self.max_episodes:
+            self.episode.popitem(last=False)
+
+    def draw_statistics(self, settings, screen, colors, font):
+        if settings['Statistics']:
+            shift_x = 10
+            shift_y = screen.get_height() - 100
+            episode_list = list(self.episode.items())[-self.max_episodes:]
+            data_keys = [
+                ("Energy max", "energy max"),
+                ("Food eaten", "food eaten"),
+                ("Death counter", "death counter"),
+                ("Dish collision counter", "dish collision counter"),
+                ("Obstacle collision", "obstacle collision counter"),
+                ("Energy loss counter", "energy loss counter"),
+                ("Total reward", "reward"),
+                ("Time", "time")
+            ]
+            
+            for i, (episode, data) in enumerate(episode_list):
+                ratio_x = 150
+                total_x_shift = shift_x + ratio_x * i
+                render_text(screen, f"Episode: {episode}", total_x_shift, shift_y, colors, font)
+                
+                for i, (label, key) in enumerate(data_keys):
+                    value = round(data[key], 2) if isinstance(data[key], float) else data[key]
+                    render_text(screen, f"{label}: {value}", total_x_shift, shift_y + (i + 1) * 10, colors, font)
+
+    def manage_statistics_update(self, settings, episode, organism, start_time, reward):
+        self.update_energy_max(organism.energy)
+        self.update_total_reward(reward.get())
+        self.total_time = (pygame.time.get_ticks() - start_time) / 1000
+        if episode % settings['EPISODE_LENGTH'] == 0:
+            self.create_episode(episode // settings['EPISODE_LENGTH'] + 1, organism)
+        self.update_episode(episode // settings['EPISODE_LENGTH'] + 1, organism)
 
 
 def render_text(screen, text, x, y, colors, font):

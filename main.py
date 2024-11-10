@@ -5,12 +5,12 @@ import pygame
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from collections import deque, OrderedDict
+from collections import deque
 from classes_and_functions.objects import Grid, Dish, Organism, Obstacle, Food
 from classes_and_functions.colors import Colors
 from classes_and_functions.menu import menu
 from classes_and_functions.button import load_button_settings
-from classes_and_functions.charts import MatrixPlotter, VectorsPlotter
+from classes_and_functions.charts import MatrixPlotter, VectorsPlotter, Statistics
 
 pygame.init()
 torch.autograd.set_detect_anomaly(True)
@@ -69,6 +69,8 @@ HIDDEN_DIMS = [64, 32]
 OUTPUT_DIM = 2
 
 LEARNING_RATE = 0.0001
+EPISODES = 10000
+EPISODE_LENGTH = 100
 
 # Параметры обучения
 EPSILON = 0.1  # Для epsilon-greedy стратегии
@@ -147,78 +149,6 @@ class Reward:
         self.obstacle_collision_reward = 0
         self.dish_collision_reward = 0
         self.energy_reward = 0
-
-
-class Statistics:
-    def __init__(self):
-        self.episode = OrderedDict()
-        self.energy_max = 0
-        self.total_reward = 0
-        self.total_time = 0
-        self.max_episodes = 9
-
-    def update_energy_max(self, energy):
-        if energy > self.energy_max:
-            self.energy_max = energy
-
-    def update_total_reward(self, reward):
-        self.total_reward += reward
-
-    def reset(self):
-        self.energy_max = 0
-        self.total_reward = 0
-        
-    def create_episode(self, episode, organism):
-        self.reset()
-        self.delete_episode()
-        self.episode[episode] = {
-            'energy max': self.energy_max,
-            'food eaten': organism.food_eaten,
-            'death counter': organism.death_counter,
-            'dish collision counter': organism.dish_collision_counter,
-            'obstacle collision counter': organism.obstacle_collision_counter,
-            'energy loss counter': organism.energy_loss_counter,
-            'reward': self.total_reward,
-            'time': self.total_time
-        }
-
-    def update_episode(self, episode, organism):
-        self.episode[episode]['energy max'] = self.energy_max
-        self.episode[episode]['food eaten'] = organism.food_eaten
-        self.episode[episode]['death counter'] = organism.death_counter
-        self.episode[episode]['dish collision counter'] = organism.dish_collision_counter
-        self.episode[episode]['obstacle collision counter'] = organism.obstacle_collision_counter
-        self.episode[episode]['energy loss counter'] = organism.energy_loss_counter
-        self.episode[episode]['reward'] = self.total_reward
-        self.episode[episode]['time'] = self.total_time
-
-    def delete_episode(self):
-        if len(self.episode) > self.max_episodes:
-            self.episode.popitem(last=False)
-
-    def draw_statistics(self, screen):
-        shift_x = 10
-        shift_y = screen.get_height() - 100
-        episode_list = list(self.episode.items())[-self.max_episodes:]
-        data_keys = [
-            ("Energy max", "energy max"),
-            ("Food eaten", "food eaten"),
-            ("Death counter", "death counter"),
-            ("Dish collision counter", "dish collision counter"),
-            ("Obstacle collision", "obstacle collision counter"),
-            ("Energy loss counter", "energy loss counter"),
-            ("Total reward", "reward"),
-            ("Time", "time")
-        ]
-        
-        for i, (episode, data) in enumerate(episode_list):
-            ratio_x = 150
-            total_x_shift = shift_x + ratio_x * i
-            render_text(screen, f"Episode: {episode}", total_x_shift, shift_y)
-            
-            for i, (label, key) in enumerate(data_keys):
-                value = round(data[key], 2) if isinstance(data[key], float) else data[key]
-                render_text(screen, f"{label}: {value}", total_x_shift, shift_y + (i + 1) * 10)
 
 
 # Текстовый вывод
@@ -303,6 +233,41 @@ def draw_all(screen, dish, obstacles, foods, organism):
     organism.draw(screen, colors, dish)
     dish.draw(screen, colors)
 
+def manage_learning(settings, state, action, reward_value, next_state, done, model, optimizer, loss_fn, memory, batch_size, loss_item):
+    # Сохранение опыта в буфер
+    if settings['Learning']:
+        memory.append((state, action, reward_value, next_state, done))
+
+        # Обучение модели
+        if len(memory) % batch_size == 0 or done:
+            loss_item = replay(memory, model, optimizer, loss_fn, batch_size)
+            if len(memory) == memory.maxlen:
+                memory.clear()
+    return loss_item
+
+def manage_buttons(screen, colors, clock, settings, buttons):
+    for button in buttons:
+        button.update_rect(screen.get_width())
+        button.check_hover()
+        button.draw(screen)
+    
+    if MENU:
+        settings = menu(screen, colors, clock, settings)
+        menu_status()
+
+def handle_events(buttons):
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            pygame.quit()
+            sys.exit()
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_m:
+            menu_status()
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            for button in buttons:
+                if button.is_clicked(event):
+                    button.action()
+                    break
+
 def menu_status():
     global MENU
     MENU = not MENU
@@ -332,6 +297,7 @@ buttons = load_button_settings(colors, "settings/buttons.yml", ACTIONS, 'main_bu
 
 def main():
     settings = menu(screen, colors, clock)
+    settings['EPISODE_LENGTH'] = EPISODE_LENGTH
     dish = Dish(DISH_RADIUS, DISH_COLLISION_PENALTY, DISH_PENALTY_MAX, screen)
     organism = Organism(dish, ORGANISM_RADIUS, SPEED, COLOR, INITIAL_ENERGY, ENERGY_LOSS_RATE, SPEED_ENERGY_LOSS_MULTIPLIER, ENERGY_DEPLETION_PENALTY)
     reward = Reward()
@@ -339,15 +305,11 @@ def main():
     vectors_plotter = VectorsPlotter()
     statistics = Statistics()
 
-    for episode in range(10000):  # Количество эпизодов
-        if episode % 100 == 0:
+    for episode in range(EPISODES):
+        if episode % settings['EPISODE_LENGTH'] == 0:
             organism.reset_counters()
-            obstacles = []
-            for _ in range(OBSTACLE_QUANTITY):
-                obstacles.append(Obstacle(OBSTACLE_RADIUS, dish, organism, obstacles, OBSTACLE_COLLISION_PENALTY, OBSTACLE_SPEED))
-            foods = []
-            for _ in range(FOOD_QUANTITY):
-                foods.append(Food(FOOD_RADIUS, FOOD_ENERGY, dish, organism, obstacles, foods, FOOD_REWARD))
+            obstacles = [Obstacle(OBSTACLE_RADIUS, dish, organism, [], OBSTACLE_COLLISION_PENALTY, OBSTACLE_SPEED) for _ in range(OBSTACLE_QUANTITY)]
+            foods = [Food(FOOD_RADIUS, FOOD_ENERGY, dish, organism, obstacles, [], FOOD_REWARD) for _ in range(FOOD_QUANTITY)]
             start_time = pygame.time.get_ticks()
             paused_time = 0
         state = organism.get_input_vector(dish, obstacles, foods)
@@ -357,34 +319,13 @@ def main():
         loss_item = 0
 
         while not done:
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    pygame.quit()
-                    sys.exit()
-                    done = False
-                if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_m:
-                        menu_status()
-                if event.type == pygame.MOUSEBUTTONDOWN:
-                    for button in buttons:
-                        if button.is_clicked(event):
-                            button.action()
-                            break
+            handle_events(buttons)
             
             if PAUSE:
                 if paused_time == 0:
                     paused_time = pygame.time.get_ticks()
 
-                # screen.fill(colors.WHITE)
-                for button in buttons:
-                    button.update_rect(screen.get_width())
-                    button.check_hover()
-                    button.draw(screen)
-                
-                if MENU:
-                    settings = menu(screen, colors, clock, settings)
-                    menu_status()
-                pygame.display.flip()
+                manage_buttons(screen, colors, clock, settings, buttons)
             else:
                 if paused_time != 0:
                     start_time += pygame.time.get_ticks() - paused_time
@@ -393,14 +334,7 @@ def main():
                 screen.fill(colors.WHITE)
                 surface = pygame.Surface((screen.get_width(), screen.get_height()), pygame.SRCALPHA)
                 
-                for button in buttons:
-                    button.update_rect(screen.get_width())
-                    button.check_hover()
-                    button.draw(screen)
-                
-                if MENU:
-                    settings = menu(screen, colors, clock, settings)
-                    menu_status()
+                manage_buttons(screen, colors, clock, settings, buttons)
 
                 for obstacle in obstacles:
                     obstacle.move(dish, grid)
@@ -410,37 +344,28 @@ def main():
                 if settings['Learning']:
                     action = choose_action(next_state.clone().detach().unsqueeze(0).requires_grad_(True), model)
                 else:
-                    action = model_action(next_state.clone().detach().unsqueeze(0).requires_grad_(True), model)
+                    action = model_action(next_state, model)
 
                 # for organism in organisms:
                 done = organism.move(action, dish, obstacles, reward, foods)
 
-                reward_value = reward.get()
-
                 if DRAW_ALL:
                     draw_all(screen, dish, obstacles, foods, organism)
 
-                # Сохранение опыта в буфер
-                if settings['Learning']:
-                    memory.append((state, action, reward_value, next_state, done))
-
-                    # Обучение модели
-                    if len(memory) % batch_size == 0 or done:
-                        loss_item = replay(memory, model, optimizer, loss_fn, batch_size)
-                        if len(memory) == memory.maxlen:
-                            memory.clear()
+                # Управление обучением
+                loss_item = manage_learning(settings, state, action, reward.get(), next_state, done, model, optimizer, loss_fn, memory, batch_size, loss_item)
 
                 state = next_state
 
                 # Render input vector
                 if settings['Input vector']:
                     if organism.input_vector is not None:
-                        input_text = get_input_text(organism.input_vector, reward_value, episode, loss_item)
+                        input_text = get_input_text(organism.input_vector, reward.get(), episode, loss_item)
                     render_text(screen, input_text, 10, 10)
 
                 # Отрисовка векторов
                 if settings['Vectors']:
-                    vectors_plotter.update(organism, reward_value)
+                    vectors_plotter.update(organism, reward.get())
                     vectors_plotter.draw_vectors_plotter(screen, colors, font)
                     vectors_plotter.draw_vectors(organism, surface, dish)
                     if len(memory) % batch_size == 0 or done:
@@ -461,25 +386,19 @@ def main():
                     reward.draw(screen)
 
                 # Обновление и отрисовка статистики
-                statistics.update_energy_max(organism.energy)
-                statistics.update_total_reward(reward.get())
-                statistics.total_time = (pygame.time.get_ticks() - start_time) / 1000
-                if episode % 100 == 0:
-                    statistics.create_episode(episode // 100 + 1, organism)
-                statistics.update_episode(episode // 100 + 1, organism)
-                if settings['Statistics']:
-                    statistics.draw_statistics(screen)
+                statistics.manage_statistics_update(settings, episode, organism, start_time, reward)
+                statistics.draw_statistics(settings, screen, colors, font)
 
-                if done and episode % 100 == 0:
+                if done and episode % settings['EPISODE_LENGTH'] == 0:
                     print(f"Episode: {episode}!")
                     # Сохранение модели
-                    torch.save(model.state_dict(), f"model{episode // 100}.pth")
+                    torch.save(model.state_dict(), f"model{episode // settings['EPISODE_LENGTH']}.pth")
 
                 reward.reset()
 
                 screen.blit(surface, (0, 0))
-                pygame.display.flip()
-                # clock.tick(60)  # Ограничение FPS
+            pygame.display.flip()
+            # clock.tick(60)  # Ограничение FPS
 
 if __name__ == "__main__":
     main()

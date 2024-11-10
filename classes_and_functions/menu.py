@@ -1,12 +1,14 @@
 import pygame
 import sys
 from functools import partial
-from classes_and_functions.button import load_button_settings, load_checkbox_settings
+from classes_and_functions.button import load_button_settings, load_checkbox_settings, load_input_box_settings
 
 # Функция для игры
-def game(settings, checkboxes):
+def game(settings, checkboxes, input_boxes):
     for checkbox in checkboxes:
         settings[checkbox.text] = checkbox.checked
+    for input_box in input_boxes:
+        settings[input_box.description] = input_box.textinput.value
 
 # Функция для выхода
 def quit_game():
@@ -21,6 +23,10 @@ def food(checkboxes):
                 checkbox.active = not checkbox.active
 
 def menu(screen, colors, clock, settings=None):
+    # Загружаем поля ввода
+    INPUT_BOXES_ACTIONS = {}
+    input_boxes = load_input_box_settings(colors, "settings/input_boxes.yml", INPUT_BOXES_ACTIONS, "input_boxes")
+
     # Загружаем чекбоксы
     checkboxes = load_checkbox_settings(colors, "settings/checkboxes.yml", None, 'checkboxes')
 
@@ -29,6 +35,8 @@ def menu(screen, colors, clock, settings=None):
     else:
         for checkbox in checkboxes:
             checkbox.checked = settings.get(checkbox.text, False)
+        for input_box in input_boxes:
+            input_box.textinput.value = settings.get(input_box.description, '')
 
     for checkbox in checkboxes:
         if checkbox.text == "Food":
@@ -36,7 +44,7 @@ def menu(screen, colors, clock, settings=None):
 
     # Настройка кнопок
     BUTTON_ACTIONS = {
-        'game': partial(game, settings, checkboxes),
+        'game': partial(game, settings, checkboxes, input_boxes),
         'quit': quit_game
     }
     buttons = load_button_settings(colors, "settings/buttons.yml", BUTTON_ACTIONS, "menu_buttons")
@@ -45,7 +53,8 @@ def menu(screen, colors, clock, settings=None):
         screen.fill(colors.WHITE)
 
         # Обработка событий
-        for event in pygame.event.get():
+        events = pygame.event.get()
+        for event in events:
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
@@ -65,6 +74,11 @@ def menu(screen, colors, clock, settings=None):
                             if checkbox.action:
                                 checkbox.action()
                             break
+                for input_box in input_boxes:
+                    input_box.handle_mouse_down(event)
+
+        for input_box in input_boxes:
+            input_box.handle_key_down(events)
         
         # Отрисовка кнопок
         for button in buttons:
@@ -77,6 +91,12 @@ def menu(screen, colors, clock, settings=None):
             checkbox.update_rect(screen.get_width())
             checkbox.check_hover()
             checkbox.draw(screen)
+
+        # Отрисовка полей ввода
+        for input_box in input_boxes:
+            input_box.update_rect(screen.get_width())
+            # input_box.handle_event(pygame.event.get())
+            input_box.draw(screen)
 
         pygame.display.flip()
         clock.tick(60)
