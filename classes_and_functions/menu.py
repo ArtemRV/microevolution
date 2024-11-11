@@ -8,7 +8,7 @@ def game(settings, checkboxes, input_boxes):
     for checkbox in checkboxes:
         settings[checkbox.text] = checkbox.checked
     for input_box in input_boxes:
-        settings[input_box.description] = input_box.textinput.value
+        settings[input_box.description] = int(input_box.textinput.value)
 
 # Функция для выхода
 def quit_game():
@@ -36,7 +36,7 @@ def menu(screen, colors, clock, settings=None):
         for checkbox in checkboxes:
             checkbox.checked = settings.get(checkbox.text, False)
         for input_box in input_boxes:
-            input_box.textinput.value = settings.get(input_box.description, '')
+            input_box.textinput.value = str(settings.get(input_box.description, ''))
 
     for checkbox in checkboxes:
         if checkbox.text == "Food":

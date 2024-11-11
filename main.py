@@ -1,6 +1,7 @@
 import numpy as np
 import random
 import sys
+import yaml
 import pygame
 import torch
 import torch.nn as nn
@@ -28,51 +29,19 @@ clock = pygame.time.Clock()
 # Colors
 colors = Colors()
 
-# Buttons
-DRAW_ALL = True
-
-# Parameters for the dish
-DISH_RADIUS = 350
-DISH_COLLISION_PENALTY = -15
-DISH_PENALTY_MAX = -30
-
-# Obstacle parameters
-OBSTACLE_RADIUS = 10
-OBSTACLE_COLLISION_PENALTY = -30
-OBSTACLE_SPEED = 1
-
-# Food parameters
-FOOD_RADIUS = 5
-FOOD_ENERGY = 5
-FOOD_REWARD = 20
-
-# Organism parameters
-ORGANISM_RADIUS = 15
-SPEED = 1.5
-INITIAL_ENERGY = 10
-ENERGY_LOSS_RATE = 0.02
-SPEED_ENERGY_LOSS_MULTIPLIER = 0.001
-ENERGY_DEPLETION_PENALTY = -10
-COLOR = colors.BLUE
-COLOR2 = colors.ORANGE
+# Settings
+settings_file = "settings/settings.yml"
 
 # Размер ячеек сетки
 GRID_SIZE = 50
-
-# Количество препятствий и еды
-OBSTACLE_QUANTITY = 30
-FOOD_QUANTITY = 60
 
 # Параметры нейронной сети
 INPUT_DIM = 22
 HIDDEN_DIMS = [64, 32]
 OUTPUT_DIM = 2
 
-LEARNING_RATE = 0.0001
-EPISODES = 10000
-EPISODE_LENGTH = 100
-
 # Параметры обучения
+LEARNING_RATE = 0.0001
 EPSILON = 0.1  # Для epsilon-greedy стратегии
 GAMMA = 0.99  # Фактор дисконтирования
 TAU = 0.005  # Скорость копирования весов основной сети в target сеть
@@ -230,7 +199,7 @@ def draw_all(screen, dish, obstacles, foods, organism):
         obstacle.draw(screen, colors, dish)
     for food in foods:
         food.draw(screen, colors, dish)
-    organism.draw(screen, colors, dish)
+    organism.draw(screen, dish)
     dish.draw(screen, colors)
 
 def manage_learning(settings, state, action, reward_value, next_state, done, model, optimizer, loss_fn, memory, batch_size, loss_item):
@@ -268,6 +237,11 @@ def handle_events(buttons):
                     button.action()
                     break
 
+def upload_settings(settings, settings_file):
+    with open(settings_file, 'r') as file:
+        data = yaml.safe_load(file)
+        settings.update(data)
+
 def menu_status():
     global MENU
     MENU = not MENU
@@ -297,19 +271,19 @@ buttons = load_button_settings(colors, "settings/buttons.yml", ACTIONS, 'main_bu
 
 def main():
     settings = menu(screen, colors, clock)
-    settings['EPISODE_LENGTH'] = EPISODE_LENGTH
-    dish = Dish(DISH_RADIUS, DISH_COLLISION_PENALTY, DISH_PENALTY_MAX, screen)
-    organism = Organism(dish, ORGANISM_RADIUS, SPEED, COLOR, INITIAL_ENERGY, ENERGY_LOSS_RATE, SPEED_ENERGY_LOSS_MULTIPLIER, ENERGY_DEPLETION_PENALTY)
+    upload_settings(settings, settings_file)
+    dish = Dish(settings, screen)
+    organism = Organism(dish, settings, colors)
     reward = Reward()
     matrix_plotter = MatrixPlotter(model.get_weights()[2])
     vectors_plotter = VectorsPlotter()
     statistics = Statistics()
 
-    for episode in range(EPISODES):
-        if episode % settings['EPISODE_LENGTH'] == 0:
+    for episode in range(settings['Number of episodes']):
+        if episode % settings['Episode length'] == 0:
             organism.reset_counters()
-            obstacles = [Obstacle(OBSTACLE_RADIUS, dish, organism, [], OBSTACLE_COLLISION_PENALTY, OBSTACLE_SPEED) for _ in range(OBSTACLE_QUANTITY)]
-            foods = [Food(FOOD_RADIUS, FOOD_ENERGY, dish, organism, obstacles, [], FOOD_REWARD) for _ in range(FOOD_QUANTITY)]
+            obstacles = [Obstacle(dish, organism, [], settings) for _ in range(settings['OBSTACLE_QUANTITY'])]
+            foods = [Food(dish, organism, obstacles, [], settings) for _ in range(settings['FOOD_QUANTITY'])]
             start_time = pygame.time.get_ticks()
             paused_time = 0
         state = organism.get_input_vector(dish, obstacles, foods)
@@ -347,9 +321,9 @@ def main():
                     action = model_action(next_state, model)
 
                 # for organism in organisms:
-                done = organism.move(action, dish, obstacles, reward, foods)
+                done = organism.move(action, dish, obstacles, reward, foods, settings)
 
-                if DRAW_ALL:
+                if settings['Draw all']:
                     draw_all(screen, dish, obstacles, foods, organism)
 
                 # Управление обучением
@@ -389,10 +363,10 @@ def main():
                 statistics.manage_statistics_update(settings, episode, organism, start_time, reward)
                 statistics.draw_statistics(settings, screen, colors, font)
 
-                if done and episode % settings['EPISODE_LENGTH'] == 0:
+                if done and episode % settings['Episode length'] == 0:
                     print(f"Episode: {episode}!")
                     # Сохранение модели
-                    torch.save(model.state_dict(), f"model{episode // settings['EPISODE_LENGTH']}.pth")
+                    torch.save(model.state_dict(), f"model{episode // settings['Episode length']}.pth")
 
                 reward.reset()
 

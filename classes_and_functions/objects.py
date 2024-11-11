@@ -26,11 +26,11 @@ class Grid:
         return grid_x, grid_y
 
 class Dish:
-    def __init__(self, radius, dish_collision_penalty, penalty_max, screen):
+    def __init__(self, settings, screen):
         self.get_center(screen)
-        self.radius = radius
-        self.dish_collision_penalty = dish_collision_penalty
-        self.penalty_max = penalty_max
+        self.radius = settings['DISH_RADIUS']
+        self.dish_collision_penalty = settings['DISH_COLLISION_PENALTY']
+        self.penalty_max = settings['DISH_PENALTY_MAX']
 
     def get_center(self, screen):
         self.x, self.y = screen.get_width() // 2, screen.get_height() // 2
@@ -39,10 +39,10 @@ class Dish:
         pygame.draw.circle(screen, colors.BLUE, (int(self.x), int(self.y)), self.radius, 2)
 
 class Obstacle:
-    def __init__(self, obstacle_radius, dish, organism, obstacles, obstacle_collision_penalty, obstacle_speed):
-        self.radius = obstacle_radius
-        self.obstacle_collision_penalty = obstacle_collision_penalty
-        self.speed = obstacle_speed
+    def __init__(self, dish, organism, obstacles, settings):
+        self.radius = settings['OBSTACLE_RADIUS']
+        self.obstacle_collision_penalty = settings['OBSTACLE_COLLISION_PENALTY']
+        self.speed = settings['OBSTACLE_SPEED']
         while True:
             x, y = random_x_y(dish, self.radius)
 
@@ -69,10 +69,10 @@ class Obstacle:
         pygame.draw.circle(screen, colors.RED, (int(self.x + dish.x), int(self.y + dish.y)), self.radius)
 
 class Food:
-    def __init__(self, food_radius, food_energy, dish, organism, obstacles, foods, food_reward):
-        self.radius = food_radius
-        self.energy = food_energy
-        self.food_reward = food_reward
+    def __init__(self, dish, organism, obstacles, foods, settings):
+        self.radius = settings['FOOD_RADIUS']
+        self.energy = settings['FOOD_ENERGY']
+        self.food_reward = settings['FOOD_REWARD']
         while True:
             x, y = random_x_y(dish, self.radius)
 
@@ -104,20 +104,20 @@ class Food:
     
 # Класс для организма
 class Organism:
-    def __init__(self, dish, organism_radius, speed, color, initial_energy, energy_loss_rate, speed_energy_loss_multiplier, energy_depletion_penalty):
-        self.radius = organism_radius
+    def __init__(self, dish, settings, colors):
+        self.radius = settings['ORGANISM_RADIUS']
         self.x, self.y = random_x_y(dish, self.radius)
         self.old_x = self.x
         self.old_y = self.y
-        self.speed = speed
-        self.color = color
+        self.speed = settings['ORGANISM_SPEED']
+        self.color = getattr(colors, settings['ORGANISM_COLOR'])
         self.vx = np.random.uniform(-self.speed, self.speed)
         self.vy = np.random.uniform(-self.speed, self.speed)
-        self.energy_loss_rate = energy_loss_rate
-        self.speed_energy_loss_multiplier = speed_energy_loss_multiplier
-        self.energy_depletion_penalty = energy_depletion_penalty
-        self.initial_energy = initial_energy
-        self.energy = initial_energy
+        self.energy_loss_rate = settings['ORGANISM_ENERGY_LOSS_RATE']
+        self.speed_energy_loss_multiplier = settings['ORGANISM_SPEED_ENERGY_LOSS_MULTIPLIER']
+        self.energy_depletion_penalty = settings['ORGANISM_ENERGY_DEPLETION_PENALTY']
+        self.initial_energy = settings['ORGANISM_INITIAL_ENERGY']
+        self.energy = settings['ORGANISM_INITIAL_ENERGY']
         self.input_vector = None
         self.reset_status = False
         self.done = False
@@ -153,24 +153,10 @@ class Organism:
                 self.input_vector.append(self.y - obstacle.y)
                 self.input_vector.append(obstacle.vx)
                 self.input_vector.append(obstacle.vy)
-        
-        # self.input_vector = np.array([
-        #     self.closest_food[0].x - self.x, self.closest_food[0].y - self.y,
-        #     self.closest_food[1].x - self.x, self.closest_food[1].y - self.y,
-        #     self.closest_food[2].x - self.x, self.closest_food[2].y - self.y,
-            # self.vx, self.vy,
-            # np.hypot(self.x, self.y) + self.radius - dish.radius,
-            # self.energy,
-        #     self.x - closest_obstacles[0].x, self.y - closest_obstacles[0].y,
-        #     closest_obstacles[0].vx, closest_obstacles[0].vy,
-        #     self.x - closest_obstacles[1].x, self.y - closest_obstacles[1].y,
-        #     closest_obstacles[1].vx, closest_obstacles[1].vy,
-        #     self.x - closest_obstacles[2].x, self.y - closest_obstacles[2].y,
-        #     closest_obstacles[2].vx, closest_obstacles[2].vy
-        # ])
+
         return torch.tensor(self.input_vector, dtype=torch.float32)
 
-    def move(self, action, dish, obstacles, reward, foods):
+    def move(self, action, dish, obstacles, reward, foods, settings):
         """Move the organism based on the action."""
         self.done = False
         self.reset_status = False
@@ -186,7 +172,7 @@ class Organism:
 
         self.dish_collision(reward, dish)
         self.obstacle_collision(reward)
-        self.food_collision(reward, dish, obstacles, foods)
+        self.food_collision(reward, dish, obstacles, foods, settings)
         self.energy_update(reward)
 
         if self.reset_status:
@@ -194,13 +180,13 @@ class Organism:
 
         return self.done
 
-    def food_collision(self, reward, dish, obstacles, foods):
+    def food_collision(self, reward, dish, obstacles, foods, settings):
         """Handle food collision and update rewards."""
         for i, food in enumerate(self.closest_food):
             if food.check_eaten(self.x, self.y, self.radius):
                 self.energy += food.energy
                 foods.remove(food)
-                foods.append(Food(food.radius, food.energy, dish, self, obstacles, foods, food.food_reward))
+                foods.append(Food(dish, self, obstacles, foods, settings))
                 self.food_eaten += 1
             new_reward = self.food_reward(food, i, self.x, self.y, self.vx, self.vy)
             reward.update(new_reward, 'eat')
@@ -284,7 +270,7 @@ class Organism:
         self.done = True
         self.death_counter += 1
 
-    def draw(self, screen, colors, dish):
+    def draw(self, screen, dish):
         pygame.draw.circle(screen, self.color, (int(self.x + dish.x), int(self.y + dish.y)), self.radius)
 
 

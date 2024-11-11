@@ -77,6 +77,19 @@ checkboxes:
     active: true
     action: statistics
 
+  - x: -300
+    y: 310
+    size: 40
+    text: Draw all
+    color: LIGHT_BLUE_GRAY
+    hover_color: DARK_BLUE_GRAY
+    check_color: MUSTARD_YELLOW
+    text_color: BLACK
+    font: 18
+    checked: true
+    active: true
+    action: draw_all
+
   - x: -500
     y: 10
     size: 40

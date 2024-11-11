@@ -221,9 +221,9 @@ class Statistics:
         self.update_energy_max(organism.energy)
         self.update_total_reward(reward.get())
         self.total_time = (pygame.time.get_ticks() - start_time) / 1000
-        if episode % settings['EPISODE_LENGTH'] == 0:
-            self.create_episode(episode // settings['EPISODE_LENGTH'] + 1, organism)
-        self.update_episode(episode // settings['EPISODE_LENGTH'] + 1, organism)
+        if episode % settings['Episode length'] == 0:
+            self.create_episode(episode // settings['Episode length'] + 1, organism)
+        self.update_episode(episode // settings['Episode length'] + 1, organism)
 
 
 def render_text(screen, text, x, y, colors, font):
