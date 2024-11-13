@@ -20,3 +20,10 @@ ORGANISM_SPEED_ENERGY_LOSS_MULTIPLIER: 0.001
 ORGANISM_ENERGY_DEPLETION_PENALTY: -10
 ORGANISM_COLOR: BLUE
 ORGANISM_COLOR2: ORANGE
+
+# Параметры обучения
+LEARNING_RATE: 0.0001
+EPSILON: 0.1  # Для epsilon-greedy стратегии
+GAMMA: 0.99  # Фактор дисконтирования
+TAU: 0.005  # Скорость копирования весов основной сети в target сеть
+BATCH_SIZE: 80

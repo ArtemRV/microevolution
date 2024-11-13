@@ -1,12 +1,13 @@
-import numpy as np
-import random
 import sys
 import yaml
 import pygame
+import threading
+import queue
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from collections import deque
+from classes_and_functions.model import DQN
 from classes_and_functions.objects import Grid, Dish, Organism, Obstacle, Food
 from classes_and_functions.colors import Colors
 from classes_and_functions.menu import menu
@@ -40,48 +41,13 @@ INPUT_DIM = 22
 HIDDEN_DIMS = [64, 32]
 OUTPUT_DIM = 2
 
-# Параметры обучения
-LEARNING_RATE = 0.0001
-EPSILON = 0.1  # Для epsilon-greedy стратегии
-GAMMA = 0.99  # Фактор дисконтирования
-TAU = 0.005  # Скорость копирования весов основной сети в target сеть
-
 # Buttons
 MENU = False
 PAUSE = False
 
 
 # Определение архитектуры нейронной сети для DQN
-class DQN(nn.Module):
-    def __init__(self, input_dim, hidden_dims, output_dim):
-        super(DQN, self).__init__()
-        
-        # Создаем список линейных слоев
-        layers = []
-        current_dim = input_dim
 
-        # Добавляем скрытые слои согласно `hidden_dims`
-        for hidden_dim in hidden_dims:
-            layers.append(nn.Linear(current_dim, hidden_dim))
-            layers.append(nn.Tanh()) # Добавляем функцию активации
-            current_dim = hidden_dim
-
-        # Добавляем выходной слой
-        layers.append(nn.Linear(current_dim, output_dim))
-        layers.append(nn.Tanh())
-        
-        # Объединяем слои в nn.Sequential для удобства
-        self.model = nn.Sequential(*layers)
-
-    def forward(self, x):
-        return self.model(x)
-    
-    def get_weights(self):
-        weights = [layer.weight.data.numpy() for layer in self.model if isinstance(layer, nn.Linear)]
-        return weights
-    
-    def load_model(self, path):
-        self.load_state_dict(torch.load(path, weights_only=True))
 
 
 class Reward:
@@ -146,47 +112,6 @@ def get_input_text(input_vector, reward, episode, loss_item):
     text += f"Loss: {str(loss_item)}\n"
     return text
 
-def choose_action(state, model):
-    if np.random.rand() < EPSILON:
-        # Случайное действие (эксплорейшн)
-        return torch.FloatTensor(1, OUTPUT_DIM).uniform_(-1, 1)
-    else:
-        return model_action(state, model)
-        
-def model_action(state, model):
-    with torch.no_grad():
-        action = model(state)
-        return action.view(1, -1)
-        
-def replay(memory, model, optimizer, loss_fn, batch_size):
-    if len(memory) < batch_size:
-        return
-    batch = random.sample(memory, batch_size)
-
-    for state, action, reward, next_state, done in batch:
-        state_tensor = state.clone().detach().unsqueeze(0)  # размер (1, state_size)
-        next_state_tensor = next_state.clone().detach().unsqueeze(0) # размер (1, state_size)
-        target = reward
-        if not done:
-            # Обновление Q-значения
-            target += GAMMA * torch.max(model(next_state_tensor)).item()
-
-        target_f = model(state_tensor).squeeze().clone()
-        action_0 = action[0][0]
-        action_1 = action[0][1]
-
-        # Обновляем значения target_f с учетом action
-        target_f[0] = action_0 * target  # Обновляем значение для первого выхода
-        target_f[1] = action_1 * target  # Обновляем значение для второго выхода
-
-        # Обучение модели
-        optimizer.zero_grad()
-        loss = loss_fn(target_f, model(state_tensor).squeeze())
-        loss.backward()
-        optimizer.step()
-
-    return loss.item()
-
 def draw_all(screen, dish, obstacles, foods, organism):
     dish.get_center(screen)
     grid.grid.clear()
@@ -202,6 +127,61 @@ def draw_all(screen, dish, obstacles, foods, organism):
     organism.draw(screen, dish)
     dish.draw(screen, colors)
 
+# def thread_learning(**kwargs):
+#     dish = kwargs['dish']
+#     organism = kwargs['organism']
+#     obstacles = kwargs['obstacles']
+#     foods = kwargs['foods']
+#     model = kwargs['model']
+#     settings = kwargs['settings']
+#     state = kwargs['state']
+
+#     reward = Reward()
+#     batch_size = settings['BATCH_SIZE']
+#     memory = deque(maxlen=batch_size * 20)
+#     loss_fn = nn.MSELoss()
+#     optimizer = optim.Adam(model.parameters(), lr=settings['LEARNING_RATE'])
+
+#     # Move obstacles
+#     if obstacles is not []:
+#         for obstacle in obstacles:
+#             obstacle.move(dish, grid)
+
+#     # Выбор действия
+#     next_state = organism.get_input_vector(dish, obstacles, foods)
+#     action = choose_action(next_state.clone().detach().unsqueeze(0).requires_grad_(True), model, settings)
+
+#     # for organism in organisms:
+#     done = organism.move(action, dish, obstacles, reward, foods, settings)
+
+#     # Управление обучением
+#     loss_item = manage_learning(settings, state, action, reward.get(), next_state, done, model, optimizer, loss_fn, memory, batch_size, loss_item)
+
+#     state = next_state
+
+# def train_network(status_queue, **kwargs):
+#     settings = kwargs['settings']
+#     for episode in range(settings['Number of episodes']):
+#         if episode % settings['Episode length'] == 0:
+#             organism.reset_counters()
+#             obstacles = [Obstacle(dish, organism, [], settings) for _ in range(settings['OBSTACLE_QUANTITY'])]
+#             foods = [Food(dish, organism, obstacles, [], settings) for _ in range(settings['FOOD_QUANTITY'])]
+#             start_time = pygame.time.get_ticks()
+#             paused_time = 0
+#         state = organism.get_input_vector(dish, obstacles, foods)
+#         done = False
+#         reward.reset()
+#         memory.clear()
+#         loss_item = 0
+
+#         while not done:
+#             pass
+
+# # Функция для запуска обучения в отдельном потоке
+# def start_training(num_epochs, status_queue):
+#     training_thread = threading.Thread(target=train_network, args=(status_queue, num_epochs))
+#     training_thread.start()
+
 def manage_learning(settings, state, action, reward_value, next_state, done, model, optimizer, loss_fn, memory, batch_size, loss_item):
     # Сохранение опыта в буфер
     if settings['Learning']:
@@ -209,7 +189,7 @@ def manage_learning(settings, state, action, reward_value, next_state, done, mod
 
         # Обучение модели
         if len(memory) % batch_size == 0 or done:
-            loss_item = replay(memory, model, optimizer, loss_fn, batch_size)
+            loss_item = model.replay(memory, optimizer, loss_fn, batch_size, settings)
             if len(memory) == memory.maxlen:
                 memory.clear()
     return loss_item
@@ -238,7 +218,7 @@ def handle_events(buttons):
                     break
 
 def upload_settings(settings, settings_file):
-    with open(settings_file, 'r') as file:
+    with open(settings_file, 'r', encoding='utf-8') as file:
         data = yaml.safe_load(file)
         settings.update(data)
 
@@ -255,23 +235,25 @@ ACTIONS = {
     "pause": pause
 }
 
-grid = Grid(GRID_SIZE)
-
-# Инициализация DQN модели, оптимизатора и функции потерь
-model = DQN(INPUT_DIM, HIDDEN_DIMS, OUTPUT_DIM)
-# model.load_model("model20.pth")
-optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
-loss_fn = nn.MSELoss()
-
-# Буфер реплея
-batch_size = 80  # Размер батча для обучения
-memory = deque(maxlen=batch_size * 20)  # Опыт для реплея
-
 buttons = load_button_settings(colors, "settings/buttons.yml", ACTIONS, 'main_buttons')
+grid = Grid(GRID_SIZE)
 
 def main():
     settings = menu(screen, colors, clock)
     upload_settings(settings, settings_file)
+
+    # Инициализация DQN модели, оптимизатора и функции потерь
+    model = DQN(INPUT_DIM, HIDDEN_DIMS, OUTPUT_DIM)
+    model.load_model(settings)
+    optimizer = optim.Adam(model.parameters(), lr=settings['LEARNING_RATE'])
+    loss_fn = nn.MSELoss()
+
+    status_queue = queue.Queue()
+
+    # Буфер реплея
+    batch_size = settings['BATCH_SIZE']  # Размер батча для обучения
+    memory = deque(maxlen=batch_size * 20)  # Опыт для реплея
+
     dish = Dish(settings, screen)
     organism = Organism(dish, settings, colors)
     reward = Reward()
@@ -316,9 +298,9 @@ def main():
                 # Выбор действия
                 next_state = organism.get_input_vector(dish, obstacles, foods)
                 if settings['Learning']:
-                    action = choose_action(next_state.clone().detach().unsqueeze(0).requires_grad_(True), model)
+                    action = model.choose_action(next_state.clone().detach().unsqueeze(0).requires_grad_(True), settings, OUTPUT_DIM)
                 else:
-                    action = model_action(next_state, model)
+                    action = model.model_action(next_state)
 
                 # for organism in organisms:
                 done = organism.move(action, dish, obstacles, reward, foods, settings)
@@ -363,10 +345,7 @@ def main():
                 statistics.manage_statistics_update(settings, episode, organism, start_time, reward)
                 statistics.draw_statistics(settings, screen, colors, font)
 
-                if done and episode % settings['Episode length'] == 0:
-                    print(f"Episode: {episode}!")
-                    # Сохранение модели
-                    torch.save(model.state_dict(), f"model{episode // settings['Episode length']}.pth")
+                model.save_model(settings, episode, done)
 
                 reward.reset()
 

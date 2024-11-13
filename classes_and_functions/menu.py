@@ -1,5 +1,7 @@
 import pygame
 import sys
+import tkinter as tk
+from tkinter import filedialog
 from functools import partial
 from classes_and_functions.button import load_button_settings, load_checkbox_settings, load_input_box_settings
 
@@ -9,6 +11,23 @@ def game(settings, checkboxes, input_boxes):
         settings[checkbox.text] = checkbox.checked
     for input_box in input_boxes:
         settings[input_box.description] = int(input_box.textinput.value)
+
+def load_model(settings):
+    # Инициализация главного окна
+    if 'model_path' not in settings or settings['model_path'] == '':
+        root = tk.Tk()
+        root.withdraw()
+
+        # Открывает диалог выбора файла
+        file_path = filedialog.askopenfilename(
+            initialdir="weights&models/models",
+            title="Выберите файл", 
+            filetypes=[("Model files", "*.pth"), ("All files", "*.*")]
+        )
+        settings['model_path'] = file_path
+        root.destroy()
+    else:
+        print("Model already loaded")
 
 # Функция для выхода
 def quit_game():
@@ -45,6 +64,7 @@ def menu(screen, colors, clock, settings=None):
     # Настройка кнопок
     BUTTON_ACTIONS = {
         'game': partial(game, settings, checkboxes, input_boxes),
+        'load_model': partial(load_model, settings),
         'quit': quit_game
     }
     buttons = load_button_settings(colors, "settings/buttons.yml", BUTTON_ACTIONS, "menu_buttons")

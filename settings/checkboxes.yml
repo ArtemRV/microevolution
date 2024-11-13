@@ -1,4 +1,17 @@
 checkboxes:
+  - x: -900
+    y: 10
+    size: 40
+    text: Parallel learning
+    color: LIGHT_BLUE_GRAY
+    hover_color: DARK_BLUE_GRAY
+    check_color: MUSTARD_YELLOW
+    text_color: BLACK
+    font: 18
+    checked: true
+    active: true
+    action: parallel_learning
+
   - x: -300
     y: 10
     size: 40

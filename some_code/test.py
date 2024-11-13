@@ -1,73 +1,68 @@
 import pygame
-import sys
+import math
+import threading
+import queue
+import time
 
 # Инициализация Pygame
 pygame.init()
+screen = pygame.display.set_mode((400, 400))
+clock = pygame.time.Clock()
 
-# Размер окна
-screen = pygame.display.set_mode((800, 600))
+# Очередь для передачи статуса обучения
+status_queue = queue.Queue()
 
-class Image(pygame.sprite.Sprite):
-    def __init__(self, image, x, y, width=None, height=None):
-        self.image = pygame.image.load(image).convert()
-        # Set the color that will be transparent
-        self.image.set_colorkey((255, 255, 255))
-        # Convert the image to the same format as the screen
-        self.image = self.image.convert_alpha()
-        # Resize the image
-        if width and height:
-            self.image = pygame.transform.scale(self.image, (width, height))
-        # Set sprite's position
-        self.sprite_rect = self.image.get_rect(center=(x, y))
-        # Create a sprite
-        self.sprite_mask = pygame.mask.from_surface(self.image)
+# Функция для обучения нейронной сети
+def train_network(num_epochs, status_queue):
+    for epoch in range(num_epochs):
+        # Здесь будет фактический код обучения на Torch
+        time.sleep(1)  # Симуляция времени на обучение одной эпохи
+        status_queue.put(f"Epoch {epoch + 1}/{num_epochs} complete")  # Обновляем статус
+    status_queue.put("Training complete")
 
-    def move(self, x, y):
-        self.sprite_rect.x = x
-        self.sprite_rect.y = y
+# Функция для запуска обучения в отдельном потоке
+def start_training(num_epochs):
+    training_thread = threading.Thread(target=train_network, args=(num_epochs, status_queue))
+    training_thread.start()
 
-    def rotate(self, angle):
-        self.image = pygame.transform.rotate(self.image, angle)
-        self.sprite_mask = pygame.mask.from_surface(self.image)
+# Основная программа Pygame
+def main_program():
+    num_epochs = 10  # Задаем количество эпох
+    start_training(num_epochs)
 
-image = Image("organism.png", 400, 200)
+    angle = 0  # Угол для анимации вращения
 
-# Загрузка другого объекта (например, кружок)
-circle_image = pygame.Surface((50, 50), pygame.SRCALPHA)
-pygame.draw.circle(circle_image, (255, 0, 0), (25, 25), 25)
-circle_rect = circle_image.get_rect(center=(200, 150))
+    running = True
+    while running:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
 
-# Создание маски для кружка
-circle_mask = pygame.mask.from_surface(circle_image)
+        # Отрисовка фона
+        screen.fill((255, 255, 255))
 
-# Основной игровой цикл
-running = True
-while running:
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            pygame.quit()
-            sys.exit()
+        # Обработка статуса из очереди
+        while not status_queue.empty():
+            status = status_queue.get()
+            print(status)  # Выводим статус в консоль
+            if status == "Training complete":
+                running = False  # Останавливаем программу после завершения
 
-    # Движение кружка по оси X (например, для проверки пересечения)
-    circle_rect.x += 1
+        # Анимация вращающегося индикатора
+        center = (200, 200)
+        radius = 50
+        end_pos = (center[0] + radius * math.cos(angle), center[1] + radius * math.sin(angle))
+        pygame.draw.circle(screen, (0, 100, 200), center, radius, 5)
+        pygame.draw.line(screen, (200, 50, 50), center, end_pos, 5)
 
-    # Проверка пересечения масок
-    offset = (circle_rect.x - image.sprite_rect.x, circle_rect.y - image.sprite_rect.y)
-    collision = image.sprite_mask.overlap(circle_mask, offset)
+        # Обновление угла для вращения индикатора
+        angle += 0.1
 
-    # Заливка экрана белым цветом
-    screen.fill((0, 0, 0))
+        # Обновление экрана
+        pygame.display.flip()
+        clock.tick(30)  # 30 FPS
 
-    # Отрисовка спрайта и кружка
-    screen.blit(image.image, image.sprite_rect)
-    screen.blit(circle_image, circle_rect)
+    pygame.quit()
 
-    # Если есть пересечение, меняем цвет экрана
-    if collision:
-        print("Пересечение!")
-        screen.fill((255, 255, 0))  # Желтый экран при пересечении
-        # Возвращаем кружок на начальную позицию
-        circle_rect.x = 200
-
-    # Обновление экрана
-    pygame.display.flip()
+if __name__ == "__main__":
+    main_program()
