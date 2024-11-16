@@ -45,11 +45,6 @@ OUTPUT_DIM = 2
 MENU = False
 PAUSE = False
 
-
-# Определение архитектуры нейронной сети для DQN
-
-
-
 class Reward:
     def __init__(self):
         self.reset()
