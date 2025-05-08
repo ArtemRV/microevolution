@@ -10,8 +10,8 @@ import numpy as np
 from common.settings import default_settings
 from common.core import Environment
 from common.models import Actor
-from server.simulation import run_simulation
 from common.utils import logging
+from server.simulation import run_simulation
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret!'
