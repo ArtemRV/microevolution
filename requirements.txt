@@ -1,0 +1,7 @@
+torch
+pygame
+flask
+flask-socketio
+numpy
+tensorboard
+werkzeug
