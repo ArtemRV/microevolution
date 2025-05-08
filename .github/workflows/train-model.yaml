@@ -37,7 +37,7 @@ jobs:
 
       - name: Run training
         run: |
-          python ${{ github.workspace }}/client/trainer.py --output-dir output
+          python client/trainer.py --output-dir output
 
       - name: Zip output directory
         run: |
