@@ -20,7 +20,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: '3.11'
 
       - name: Cache Poetry virtualenv
         uses: actions/cache@v4
@@ -34,11 +34,11 @@ jobs:
 
       - name: Install Poetry
         run: |
-          pip install poetry
+          pip install poetry==1.8.3
 
       - name: Install dependencies with client group
         run: |
-          poetry install --no-root --with client
+          poetry install --no-root --with client --no-interaction
 
       - name: Run training
         run: |
@@ -46,7 +46,11 @@ jobs:
 
       - name: Zip output directory
         run: |
-          zip -r model_${{ matrix.runner }}_artifacts.zip output
+          if [ -d output ]; then
+            zip -r model_${{ matrix.runner }}_artifacts.zip output training_log.txt
+          else
+            echo "Output directory not found, skipping zip"
+          fi
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
