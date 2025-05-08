@@ -5,6 +5,7 @@ import asyncio
 import platform
 import pygame
 import pygame_menu
+import os
 from pygame_menu.locals import INPUT_INT, INPUT_FLOAT, INPUT_TEXT, ALIGN_LEFT
 from client.plotting import Plotter, test_policy
 from client.main import RenderableEnvironment
@@ -14,7 +15,7 @@ from common.utils import logging
 from torch.utils.tensorboard import SummaryWriter
 
 # Initialize TensorBoard
-writer = SummaryWriter(log_dir="runs/micro_evolution_" + str(uuid.uuid4()))
+writer = SummaryWriter(log_dir="output/runs/micro_evolution_" + str(uuid.uuid4()))
 
 # Initialize Pygame
 pygame.init()
@@ -198,6 +199,8 @@ class SimulationScene(Scene):
         self.settings = scene_manager.settings
         self.model_path = scene_manager.model_path
         client_settings.update(self.settings)
+        self.output_dir = "./output"
+        os.makedirs(self.output_dir, exist_ok=True)
         self.screen = screen
         self.env = RenderableEnvironment(client_settings, screen)
         self.state_dim = len(self.env.reset())
@@ -307,7 +310,8 @@ class SimulationScene(Scene):
             if self.episode % 50 == 0 and self.episode > 0:
                 test_avg_reward = test_policy(self.agent, self.env)
                 writer.add_scalar("Reward/Test_Avg", test_avg_reward, self.episode)
-                self.agent.save(self.episode, test_avg_reward)
+                model_path = os.path.join(self.output_dir, f"model_ep{self.episode}_reward{test_avg_reward:.2f}.pth")
+                self.agent.save(self.episode, test_avg_reward, model_path)
 
                 if len(self.running_avg_rewards) >= 100:
                     recent_avg = np.mean(self.running_avg_rewards[-50:])

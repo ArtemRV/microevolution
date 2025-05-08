@@ -6,7 +6,7 @@ default_settings = {
     'organism_radius': 10,
     'food_radius': 5,
     'obstacle_radius': 15,
-    'food_quantity': 50,
+    'food_quantity': 20,
     'obstacle_quantity': 5,
     'grid_size': 50,
     'max_speed': 5.0,

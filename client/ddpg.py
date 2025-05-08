@@ -107,11 +107,11 @@ class DDPGAgent:
         for target_param, param in zip(target.parameters(), source.parameters()):
             target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
 
-    def save(self, episode, test_reward):
+    def save(self, episode, test_reward, model_path):
         try:
-            os.makedirs("models", exist_ok=True)
-            actor_path = f"models/actor_{episode}.pth"
-            critic_path = f"models/critic_{episode}.pth"
+            os.makedirs(os.path.dirname(model_path), exist_ok=True)  # Ensure directory exists
+            actor_path = model_path.replace(".pth", "_actor.pth")
+            critic_path = model_path.replace(".pth", "_critic.pth")
             torch.save(self.actor.state_dict(), actor_path)
             torch.save(self.critic.state_dict(), critic_path)
             logging.info(f"Saved models for episode {episode} at {actor_path}, {critic_path}")
