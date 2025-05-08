@@ -71,11 +71,12 @@ class DDPGAgent:
             batch = random.sample(self.memory, self.batch_size)
             states, actions, rewards, next_states, dones = zip(*batch)
 
-            states = torch.FloatTensor(states).to(self.device)
-            actions = torch.FloatTensor(actions).to(self.device)
-            rewards = torch.FloatTensor(rewards).unsqueeze(1).to(self.device)
-            next_states = torch.FloatTensor(next_states).to(self.device)
-            dones = torch.FloatTensor(dones).unsqueeze(1).to(self.device)
+            # Convert lists/tuples to NumPy arrays first
+            states = torch.FloatTensor(np.array(states)).to(self.device)
+            actions = torch.FloatTensor(np.array(actions)).to(self.device)
+            rewards = torch.FloatTensor(np.array(rewards)).unsqueeze(1).to(self.device)
+            next_states = torch.FloatTensor(np.array(next_states)).to(self.device)
+            dones = torch.FloatTensor(np.array(dones)).unsqueeze(1).to(self.device)
 
             next_actions = self.actor_target(next_states)
             noise = torch.clamp(torch.randn_like(next_actions) * 0.1, -0.5, 0.5)
@@ -109,7 +110,7 @@ class DDPGAgent:
 
     def save(self, episode, test_reward, model_path):
         try:
-            os.makedirs(os.path.dirname(model_path), exist_ok=True)  # Ensure directory exists
+            os.makedirs(os.path.dirname(model_path), exist_ok=True)
             actor_path = model_path.replace(".pth", "_actor.pth")
             critic_path = model_path.replace(".pth", "_critic.pth")
             torch.save(self.actor.state_dict(), actor_path)
@@ -118,8 +119,8 @@ class DDPGAgent:
 
             if test_reward > self.best_test_reward:
                 self.best_test_reward = test_reward
-                best_actor_path = "models/best_actor.pth"
-                best_critic_path = "models/best_critic.pth"
+                best_actor_path = os.path.join(os.path.dirname(model_path), "best_actor.pth")
+                best_critic_path = os.path.join(os.path.dirname(model_path), "best_critic.pth")
                 torch.save(self.actor.state_dict(), best_actor_path)
                 torch.save(self.critic.state_dict(), best_critic_path)
                 self.best_model_info = {
@@ -129,16 +130,17 @@ class DDPGAgent:
                     'critic_path': best_critic_path,
                     'settings': self.settings
                 }
-                with open("models/best_model_info.json", 'w') as f:
+                with open(os.path.join(os.path.dirname(model_path), "best_model_info.json"), 'w') as f:
                     json.dump(self.best_model_info, f, indent=4)
                 logging.info(f"New best model saved with test reward {test_reward:.2f} at episode {episode}")
         except Exception as e:
             logging.error(f"Failed to save models: {e}")
 
-    def load_best(self):
+    def load_best(self, model_path):
         try:
-            if os.path.exists("models/best_model_info.json"):
-                with open("models/best_model_info.json", 'r') as f:
+            best_model_path = os.path.join(os.path.dirname(model_path), "best_model_info.json")
+            if os.path.exists(best_model_path):
+                with open(best_model_path, 'r') as f:
                     best_model_info = json.load(f)
                 actor_path = best_model_info['actor_path']
                 critic_path = best_model_info['critic_path']

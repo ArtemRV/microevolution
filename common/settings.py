@@ -20,6 +20,12 @@ default_settings = {
     'episode_length': 500,
 }
 
+default_trainer_settings = {
+    'random_model': True,
+    'output_dir': '.\output',
+    'model_path': None,
+}
+
 # Client-specific settings (extend default_settings)
 client_settings = {
     **default_settings,

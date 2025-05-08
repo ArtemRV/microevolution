@@ -1,3 +1,9 @@
-*_pycache_*
+__pycache__/
+*.pyc
+*.pyo
+
 game.log
+
+output/
+
 # model*.pth

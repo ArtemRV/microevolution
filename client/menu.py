@@ -199,7 +199,7 @@ class SimulationScene(Scene):
         self.settings = scene_manager.settings
         self.model_path = scene_manager.model_path
         client_settings.update(self.settings)
-        self.output_dir = "./output"
+        self.output_dir = ".\output"
         os.makedirs(self.output_dir, exist_ok=True)
         self.screen = screen
         self.env = RenderableEnvironment(client_settings, screen)
@@ -209,7 +209,7 @@ class SimulationScene(Scene):
         if self.model_path:
             self.agent.load(self.model_path)
         else:
-            self.agent.load_best()
+            self.agent.load_best(self.model_path)
         self.plotter = Plotter(max_data_points=500)
         self.log_messages = []
         self.clock = pygame.time.Clock()

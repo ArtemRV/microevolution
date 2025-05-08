@@ -5,32 +5,31 @@ import os
 from client.ddpg import DDPGAgent
 from client.plotting import test_policy
 from common.core import Environment
-from common.settings import client_settings
+from common.settings import client_settings, default_trainer_settings
 from common.utils import logging
 from torch.utils.tensorboard import SummaryWriter
 
 class Trainer:
     """Handles model training without UI."""
-    def __init__(self, settings, output_dir, model_path=None, episodes=1000):
+    def __init__(self, settings):
         self.settings = settings.copy()
-        self.output_dir = output_dir
-        self.model_path = model_path
-        self.episodes = episodes
-        self.writer = SummaryWriter(log_dir=os.path.join(output_dir, "runs", f"train_{uuid.uuid4()}"))
+        self.output_dir = self.settings['output_dir']
+        self.model_path = self.settings['model_path']
+        self.episodes = self.settings['episodes']
+        self.random_model = self.settings['random_model']
+        self.writer = SummaryWriter(log_dir=os.path.join(self.output_dir, "runs", f"train_{uuid.uuid4()}"))
         self.env = Environment(self.settings)
         self.state_dim = len(self.env.reset())
         self.action_dim = 2
         self.agent = DDPGAgent(self.state_dim, self.action_dim, self.settings)
-        if self.model_path:
-            self.agent.load(self.model_path)
-        else:
-            self.agent.load_best()
+        if not self.random_model:
+            if self.model_path:
+                self.agent.load(self.model_path)
+            else:
+                self.agent.load_best(self.model_path)
         self.total_rewards = []
         self.running_avg_rewards = []
         self.log_messages = []
-        # self.critic_losses = []
-        # self.actor_losses = []
-        # self.q_values = []
 
     def train(self):
         """Run the training loop."""
@@ -53,9 +52,6 @@ class Trainer:
                     self.writer.add_scalar("Loss/Critic", losses[0], episode)
                     self.writer.add_scalar("Loss/Actor", losses[1], episode)
                     self.writer.add_scalar("Q_Value/Mean", losses[2], episode)
-                    # self.critic_losses.append(losses[0])
-                    # self.actor_losses.append(losses[1])
-                    # self.q_values.append(losses[2])
 
             self.total_rewards.append(episode_reward)
             self.writer.add_scalar("Reward/Episode", episode_reward, episode)
@@ -64,10 +60,6 @@ class Trainer:
                 running_avg = np.mean(self.total_rewards[-50:])
                 self.running_avg_rewards.append(running_avg)
                 self.writer.add_scalar("Reward/Running_Avg_50", running_avg, episode)
-
-            # avg_critic_loss = np.mean(self.critic_losses) if self.critic_losses else 0
-            # avg_actor_loss = np.mean(self.actor_losses) if self.actor_losses else 0
-            # avg_q_value = np.mean(self.q_values) if self.q_values else 0
 
             if episode % 10 == 0:
                 avg_reward = np.mean(self.total_rewards[-10:]) if self.total_rewards else 0
@@ -91,10 +83,6 @@ class Trainer:
                         self.log_messages.append(log_msg)
                         print(log_msg)
 
-            # self.critic_losses = []
-            # self.actor_losses = []
-            # self.q_values = []
-
         self.writer.close()
         final_model_path = os.path.join(self.output_dir, "final_model.pth")
         self.agent.save(self.episodes, np.mean(self.total_rewards[-10:]), final_model_path)
@@ -103,36 +91,40 @@ class Trainer:
 def parse_args():
     """Parse command-line arguments for training."""
     parser = argparse.ArgumentParser(description="Micro Evolution Training with DDPG")
-    parser.add_argument('--output-dir', type=str, default='./output', help="Directory to save models and logs")
+    parser.add_argument('--output-dir', type=str, help="Directory to save models and logs")
     parser.add_argument('--model-path', type=str, help="Path to pre-trained model")
     parser.add_argument('--episodes', type=int, default=1000, help="Number of training episodes")
     parser.add_argument('--episode-length', type=int, help="Length of each episode")
-    parser.add_argument('--width', type=int, help="Environment width")
-    parser.add_argument('--height', type=int, help="Environment height")
     parser.add_argument('--dish-radius', type=int, help="Dish radius")
     parser.add_argument('--food-quantity', type=int, help="Number of food items")
     parser.add_argument('--obstacle-quantity', type=int, help="Number of obstacles")
+    parser.add_argument('--random-model', action='store_false', help="Start with a randomly initialized model, default=True")
     return parser.parse_args()
 
 def main():
     """CLI entry point for training."""
     args = parse_args()
-    settings = client_settings.copy()
+    print(args)
+    settings = client_settings.copy() | default_trainer_settings.copy()
+    if args.output_dir:
+        settings['output_dir'] = args.output_dir
+    if args.model_path:
+        settings['model_path'] = args.model_path
+    if args.episodes:
+        settings['episodes'] = args.episodes
     if args.episode_length:
         settings['episode_length'] = args.episode_length
-    if args.width:
-        settings['width'] = args.width
-    if args.height:
-        settings['height'] = args.height
     if args.dish_radius:
         settings['dish_radius'] = args.dish_radius
     if args.food_quantity:
         settings['food_quantity'] = args.food_quantity
     if args.obstacle_quantity:
         settings['obstacle_quantity'] = args.obstacle_quantity
+    if args.random_model:
+        settings['random_model'] = args.random_model
     settings['render'] = False  # Disable rendering
-    os.makedirs(args.output_dir, exist_ok=True)
-    trainer = Trainer(settings, args.output_dir, args.model_path, args.episodes)
+    os.makedirs(settings['output_dir'], exist_ok=True)
+    trainer = Trainer(settings)
     trainer.train()
 
 if __name__ == "__main__":
