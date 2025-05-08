@@ -37,7 +37,7 @@ jobs:
 
       - name: Run training
         run: |
-          python train.py --output-dir output
+          python -m client.train --output-dir output
 
       - name: Zip output directory
         run: |
