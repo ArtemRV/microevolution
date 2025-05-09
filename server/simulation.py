@@ -54,7 +54,7 @@ def run_simulation(agent, settings, lives=3, sid=None, socketio=None):
     plt.ylabel('Energy')
     plt.legend()
     plt.grid(True)
-    plot_path = os.path.join('outputs', f'simulation_{uuid.uuid4()}.png')
+    plot_path = os.path.join('server', 'simulations', f'simulation_{uuid.uuid4()}.png')
     plt.savefig(plot_path)
     plt.close()
 

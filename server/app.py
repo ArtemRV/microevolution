@@ -19,9 +19,9 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Directories
 UPLOAD_FOLDER = 'models'
-OUTPUT_FOLDER = 'outputs'
+SIMULATION_FOLDER = os.path.join('server', 'simulations')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-os.makedirs(OUTPUT_FOLDER, exist_ok=True)
+os.makedirs(SIMULATION_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 class DDPGAgent:
@@ -97,15 +97,15 @@ def handle_simulation(data):
 
         emit('simulation_complete', {
             'results': results,
-            'plot_url': f'/outputs/{os.path.basename(plot_path)}'
+            'plot_url': f'/simulations/{os.path.basename(plot_path)}'
         }, room=sid)
     except Exception as e:
         logging.error(f"Error running simulation: {e}")
         emit('simulation_error', {'error': str(e)}, room=sid)
 
-@app.route('/outputs/<filename>')
+@app.route('/simulations/<filename>')
 def serve_output(filename):
-    return send_file(os.path.join(OUTPUT_FOLDER, filename))
+    return send_file(os.path.join('simulations', filename))
 
 if __name__ == '__main__':
     socketio.run(app, debug=True)
