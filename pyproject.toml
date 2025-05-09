@@ -22,24 +22,8 @@ client = [
 ]
 server = [
     "flask>=3.1.0",
-    "flask-socketio>=5.5.1",
-    "werkzeug>=3.1.3"
+    "flask-socketio>=5.5.1"
 ]
-
-[tool.poetry.group.client]
-optional = true
-
-[tool.poetry.group.client.dependencies]
-pygame = ">=2.6.1"
-pygame-menu = ">=4.5.2"
-
-[tool.poetry.group.server]
-optional = true
-
-[tool.poetry.group.server.dependencies]
-flask = ">=3.1.0"
-flask-socketio = ">=5.5.1"
-werkzeug = ">=3.1.3"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
