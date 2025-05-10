@@ -1,61 +1,62 @@
 import numpy as np
 from common.utils import is_position_free
 
-class Grid:
-    def __init__(self, cell_size, width, height):
-        self.cell_size = cell_size
-        self.width = width
-        self.height = height
-        self.grid = {}
-
-    def clear(self):
-        self.grid.clear()
-
-    def add(self, obj):
-        cell_x = int(obj.pos[0] // self.cell_size)
-        cell_y = int(obj.pos[1] // self.cell_size)
-        key = (cell_x, cell_y)
-        if key not in self.grid:
-            self.grid[key] = []
-        self.grid[key].append(obj)
-
-    def get_nearby_objects(self, pos):
-        cell_x = int(pos[0] // self.cell_size)
-        cell_y = int(pos[1] // self.cell_size)
-        objects = []
-        for dx in [-1, 0, 1]:
-            for dy in [-1, 0, 1]:
-                key = (cell_x + dx, cell_y + dy)
-                if key in self.grid:
-                    objects.extend(self.grid[key])
-        return objects
-
-class Organism:
-    def __init__(self, env, settings):
+class GameObject:
+    def __init__(self, env, settings, object_type, existing_objects=None):
         self.env = env
         self.settings = settings
-        self.radius = settings['organism_radius']
-        self.energy = settings['initial_energy']
-        self.food_eaten = 0
-        self.pos = np.array([env.dish_center[0], env.dish_center[1]], dtype=float)
+        self.object_type = object_type
+        self.radius = settings[self.object_type]['radius']
+        self.pos = self._initialize_position(existing_objects)
         self.vel = np.array([0.0, 0.0])
-        self.max_speed = settings['max_speed']
+
+    def _initialize_position(self, existing_objects):
+        """Initialize position within the dish, ensuring no overlap with existing objects."""
+        max_attempts = 100
+        for _ in range(max_attempts):
+            theta = np.random.uniform(0, 2 * np.pi)
+            r = np.random.uniform(0, self.env.dish_radius - self.radius)
+            pos = np.array([
+                self.env.dish_center[0] + r * np.cos(theta),
+                self.env.dish_center[1] + r * np.sin(theta)
+            ])
+            if is_position_free(pos, self.radius, self.env.dish_center, self.env.dish_radius, existing_objects or [], 5.0):
+                return pos
+        return np.array([self.env.dish_center[0], self.env.dish_center[1]], dtype=float)
+
+    def move(self):
+        """Update position based on velocity and handle dish boundary collisions."""
+        self.pos += self.vel
+        dist_to_center = np.linalg.norm(self.pos - self.env.dish_center)
+        if dist_to_center > self.env.dish_radius - self.radius:
+            normal = (self.env.dish_center - self.pos) / (dist_to_center + 1e-6)
+            dot_product = np.dot(self.vel, normal)
+            self.vel = self.vel - 2 * dot_product * normal
+            direction = (self.pos - self.env.dish_center) / (dist_to_center + 1e-6)
+            self.pos = self.env.dish_center + direction * (self.env.dish_radius - self.radius)
+
+class Organism(GameObject):
+    def __init__(self, env, settings):
+        super().__init__(env, settings, 'organism')
+        self.energy = settings['organism']['initial_energy']
+        self.food_eaten = 0
+        self.max_speed = settings['organism']['max_speed']
         self.prev_action = np.array([0.0, 0.0])
 
     def reset(self):
         self.pos = np.array([self.env.dish_center[0], self.env.dish_center[1]], dtype=float)
         self.vel = np.array([0.0, 0.0])
-        self.energy = self.settings['initial_energy']
+        self.energy = self.settings['organism']['initial_energy']
         self.food_eaten = 0
         self.prev_action = np.array([0.0, 0.0])
 
     def move(self, action, foods, obstacles):
-        acceleration = np.array(action) * self.settings['max_acceleration']
+        acceleration = np.array(action) * self.settings['organism']['max_acceleration']
         self.vel += acceleration
         speed = np.linalg.norm(self.vel)
         if speed > self.max_speed and speed > 0:
             self.vel = self.vel / speed * self.max_speed
-        self.pos += self.vel
+        super().move()
         self.prev_action = action
 
         dist_to_center = np.linalg.norm(self.pos - self.env.dish_center)
@@ -70,7 +71,7 @@ class Organism:
         for food in nearby_foods[:]:
             if np.linalg.norm(self.pos - food.pos) < self.radius + food.radius:
                 self.env.reward.update(10, 'eat')
-                self.energy += self.settings['energy_per_food']
+                self.energy += self.settings['organism']['energy_per_food']
                 self.food_eaten += 1
                 if food in self.env.foods:
                     self.env.foods.remove(food)
@@ -82,8 +83,8 @@ class Organism:
                 self.env.reward.update(-20, 'obstacle_collision')
                 return True
 
-        self.energy -= self.settings['energy_per_step']
-        self.env.reward.update(-self.settings['energy_per_step'], 'energy')
+        self.energy -= self.settings['organism']['energy_per_step']
+        self.env.reward.update(-self.settings['organism']['energy_per_step'], 'energy')
         if self.energy <= 0:
             return True
 
@@ -94,7 +95,7 @@ class Organism:
         rel_pos = (self.pos - self.env.dish_center) / self.env.dish_radius
         state.extend(rel_pos)
         state.extend(self.vel / self.max_speed)
-        state.append(self.energy / self.settings['initial_energy'])
+        state.append(self.energy / self.settings['organism']['initial_energy'])
         state.append(np.linalg.norm(self.pos - self.env.dish_center) / self.env.dish_radius)
         direction = np.arctan2(self.vel[1], self.vel[0]) / np.pi if np.linalg.norm(self.vel) > 0 else 0
         state.append(direction)
@@ -120,111 +121,43 @@ class Organism:
 
         return np.array(state, dtype=np.float32)
 
-class Food:
+class Food(GameObject):
     def __init__(self, env, settings, existing_objects):
-        self.env = env
-        self.settings = settings
-        self.radius = settings['food_radius']
-        self.vel = np.array([0.0, 0.0])
-        max_attempts = 100
-        for _ in range(max_attempts):
-            theta = np.random.uniform(0, 2 * np.pi)
-            r = np.random.uniform(0, env.dish_radius - self.radius)
-            self.pos = np.array([
-                env.dish_center[0] + r * np.cos(theta),
-                env.dish_center[1] + r * np.sin(theta)
-            ])
-            if is_position_free(self.pos, self.radius, env.dish_center, env.dish_radius, existing_objects, 5.0):
-                break
-        else:
-            self.pos = np.array([env.dish_center[0], env.dish_center[1]])
+        super().__init__(env, settings, 'food', existing_objects)
 
     def move(self):
-        self.pos += self.vel
-        dist_to_center = np.linalg.norm(self.pos - self.env.dish_center)
-        if dist_to_center > self.env.dish_radius - self.radius:
-            self.vel = -self.vel
-            direction = (self.pos - self.env.dish_center) / (dist_to_center + 1e-6)
-            self.pos = self.env.dish_center + direction * (self.env.dish_radius - self.radius)
+        super().move()
 
-class Obstacle:
+class Obstacle(GameObject):
     def __init__(self, env, settings, existing_objects):
-        self.env = env
-        self.settings = settings
-        self.radius = settings['obstacle_radius']
-        max_attempts = 100
-        for _ in range(max_attempts):
-            theta = np.random.uniform(0, 2 * np.pi)
-            r = np.random.uniform(0, env.dish_radius - self.radius)
-            self.pos = np.array([
-                env.dish_center[0] + r * np.cos(theta),
-                env.dish_center[1] + r * np.sin(theta)
-            ])
-            if is_position_free(self.pos, self.radius, env.dish_center, env.dish_radius, existing_objects, 5.0):
-                break
-        else:
-            self.pos = np.array([env.dish_center[0], env.dish_center[1]])
-        self.vel = np.random.uniform(-settings['obstacle_max_speed'], settings['obstacle_max_speed'], 2)
+        super().__init__(env, settings, 'obstacle', existing_objects)
+        self.vel = np.random.uniform(-settings['obstacle']['max_speed'], settings['obstacle']['max_speed'], 2)
 
     def move(self):
-        self.pos += self.vel
-        dist_to_center = np.linalg.norm(self.pos - self.env.dish_center)
-        if dist_to_center > self.env.dish_radius - self.radius:
-            normal = (self.env.dish_center - self.pos) / (dist_to_center + 1e-6)
-            dot_product = np.dot(self.vel, normal)
-            self.vel = self.vel - 2 * dot_product * normal
-            direction = (self.pos - self.env.dish_center) / (dist_to_center + 1e-6)
-            self.pos = self.env.dish_center + direction * (self.env.dish_radius - self.radius)
+        super().move()
 
-class Reward:
-    def __init__(self):
-        self.reset()
-
-    def reset(self):
-        self.total = 0
-        self.eat = 0
-        self.obstacle_collision = 0
-        self.dish_collision = 0
-        self.energy = 0
-        self.approach = 0
-
-    def update(self, value, reward_type):
-        self.total += value
-        if reward_type == 'eat':
-            self.eat += value
-        elif reward_type == 'obstacle_collision':
-            self.obstacle_collision = value
-        elif reward_type == 'dish_collision':
-            self.dish_collision = value
-        elif reward_type == 'energy':
-            self.energy = value
-        elif reward_type == 'approach':
-            self.approach = value
-
-    def get(self):
-        return self.total
-
+# Update Environment class to use new settings structure
 class Environment:
     def __init__(self, settings, obstacle_quantity=None):
         self.settings = settings
-        self.width = settings['width']
-        self.height = settings['height']
-        self.dish_radius = settings['dish_radius']
+        self.width = settings['general']['width']
+        self.height = settings['general']['height']
+        self.dish_radius = settings['general']['dish_radius']
         self.dish_center = (self.width // 2, self.height // 2)
         self.agent = Organism(self, settings)
         self.foods = []
         existing_objects = [self.agent]
-        for _ in range(settings['food_quantity']):
+        for _ in range(settings['food']['quantity']):
             food = Food(self, settings, existing_objects)
             self.foods.append(food)
             existing_objects.append(food)
         self.obstacles = []
-        obstacle_quantity = obstacle_quantity or settings['obstacle_quantity']
+        obstacle_quantity = obstacle_quantity or settings['obstacle']['quantity']
         for _ in range(obstacle_quantity):
             obstacle = Obstacle(self, settings, existing_objects)
             self.obstacles.append(obstacle)
             existing_objects.append(obstacle)
-        self.grid_size = settings['grid_size']
+        self.grid_size = settings['general']['grid_size']
         self.grid = Grid(self.grid_size, self.width, self.height)
         self.reward = Reward()
         self.update_grid()
@@ -241,12 +174,12 @@ class Environment:
         self.agent.reset()
         self.foods = []
         existing_objects = [self.agent]
-        for _ in range(self.settings['food_quantity']):
+        for _ in range(self.settings['food']['quantity']):
             food = Food(self, self.settings, existing_objects)
             self.foods.append(food)
             existing_objects.append(food)
         self.obstacles = []
-        obstacle_quantity = len(self.obstacles) or self.settings['obstacle_quantity']
+        obstacle_quantity = len(self.obstacles) or self.settings['obstacle']['quantity']
         for _ in range(obstacle_quantity):
             obstacle = Obstacle(self, self.settings, existing_objects)
             self.obstacles.append(obstacle)
@@ -309,3 +242,61 @@ class Environment:
                 'approach': self.reward.approach
             }
         }
+
+# Grid and Reward classes remain unchanged
+class Grid:
+    def __init__(self, cell_size, width, height):
+        self.cell_size = cell_size
+        self.width = width
+        self.height = height
+        self.grid = {}
+
+    def clear(self):
+        self.grid.clear()
+
+    def add(self, obj):
+        cell_x = int(obj.pos[0] // self.cell_size)
+        cell_y = int(obj.pos[1] // self.cell_size)
+        key = (cell_x, cell_y)
+        if key not in self.grid:
+            self.grid[key] = []
+        self.grid[key].append(obj)
+
+    def get_nearby_objects(self, pos):
+        cell_x = int(pos[0] // self.cell_size)
+        cell_y = int(pos[1] // self.cell_size)
+        objects = []
+        for dx in [-1, 0, 1]:
+            for dy in [-1, 0, 1]:
+                key = (cell_x + dx, cell_y + dy)
+                if key in self.grid:
+                    objects.extend(self.grid[key])
+        return objects
+
+class Reward:
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.total = 0
+        self.eat = 0
+        self.obstacle_collision = 0
+        self.dish_collision = 0
+        self.energy = 0
+        self.approach = 0
+
+    def update(self, value, reward_type):
+        self.total += value
+        if reward_type == 'eat':
+            self.eat += value
+        elif reward_type == 'obstacle_collision':
+            self.obstacle_collision = value
+        elif reward_type == 'dish_collision':
+            self.dish_collision = value
+        elif reward_type == 'energy':
+            self.energy = value
+        elif reward_type == 'approach':
+            self.approach = value
+
+    def get(self):
+        return self.total

@@ -1,7 +1,7 @@
 import pygame
 import numpy as np
 from common.settings import Colors
-from common.core import Environment, Organism, Food, Obstacle, Reward, Grid
+from common.game_object import Environment, Organism, Food, Obstacle, Reward, Grid
 
 # Initialize Pygame
 pygame.init()
@@ -16,7 +16,7 @@ class RenderableOrganism(Organism):
         pygame.draw.circle(screen, colors.BLUE, pos, radius)
 
     def move(self, action, foods, obstacles):
-        acceleration = np.array(action) * self.settings['max_acceleration']
+        acceleration = np.array(action) * self.settings['organism']['max_acceleration']
         self.vel += acceleration
         speed = np.linalg.norm(self.vel)
         if speed > self.max_speed and speed > 0:
@@ -36,7 +36,7 @@ class RenderableOrganism(Organism):
         for food in nearby_foods[:]:
             if np.linalg.norm(self.pos - food.pos) < self.radius + food.radius:
                 self.env.reward.update(10, 'eat')
-                self.energy += self.settings['energy_per_food']
+                self.energy += self.settings['organism']['energy_per_food']
                 self.food_eaten += 1
                 if food in self.env.foods:
                     self.env.foods.remove(food)
@@ -48,8 +48,8 @@ class RenderableOrganism(Organism):
                 self.env.reward.update(-20, 'obstacle_collision')
                 return True
 
-        self.energy -= self.settings['energy_per_step']
-        self.env.reward.update(-self.settings['energy_per_step'], 'energy')
+        self.energy -= self.settings['organism']['energy_per_step']
+        self.env.reward.update(-self.settings['organism']['energy_per_step'], 'energy')
         if self.energy <= 0:
             return True
 
@@ -88,20 +88,20 @@ class RenderableEnvironment(Environment):
         self.screen = screen
         self.episode = episode
         self.settings = settings
-        self.width = settings['width']
-        self.height = settings['height']
-        self.dish_radius = settings['dish_radius']
-        self.dish_center = (self.width // 2, 10 + settings['dish_radius'])
-        self.grid_size = settings['grid_size']
+        self.width = settings['general']['width']
+        self.height = settings['general']['height']
+        self.dish_radius = settings['general']['dish_radius']
+        self.dish_center = (self.width // 2, 10 + settings['general']['dish_radius'])
+        self.grid_size = settings['general']['grid_size']
         self.grid = Grid(self.grid_size, self.width, self.height)
         self.scale = 1.0
         
         # Use rendering-specific classes
-        obstacle_quantity = min(settings['obstacle_quantity'], 2 + episode // 200)
+        obstacle_quantity = min(settings['obstacle']['quantity'], 2 + episode // 200)
         self.agent = RenderableOrganism(self, settings)
         self.foods = []
         existing_objects = [self.agent]
-        for _ in range(settings['food_quantity']):
+        for _ in range(settings['food']['quantity']):
             food = RenderableFood(self, settings, existing_objects)
             self.foods.append(food)
             existing_objects.append(food)
@@ -117,12 +117,12 @@ class RenderableEnvironment(Environment):
         self.agent = RenderableOrganism(self, self.settings)
         self.foods = []
         existing_objects = [self.agent]
-        for _ in range(self.settings['food_quantity']):
+        for _ in range(self.settings['food']['quantity']):
             food = RenderableFood(self, self.settings, existing_objects)
             self.foods.append(food)
             existing_objects.append(food)
         self.obstacles = []
-        obstacle_quantity = min(self.settings['obstacle_quantity'], 2 + self.episode // 200)
+        obstacle_quantity = min(self.settings['obstacle']['quantity'], 2 + self.episode // 200)
         for _ in range(obstacle_quantity):
             obstacle = RenderableObstacle(self, self.settings, existing_objects)
             self.obstacles.append(obstacle)

@@ -4,8 +4,8 @@ import uuid
 import os
 from client.ddpg import DDPGAgent
 from client.plotting import test_policy
-from common.core import Environment
-from common.settings import client_settings, default_trainer_settings
+from common.game_object import Environment
+from common.settings import trainer_settings
 from common.utils import logging
 from torch.utils.tensorboard import SummaryWriter
 
@@ -105,7 +105,7 @@ def main():
     """CLI entry point for training."""
     args = parse_args()
     print(args)
-    settings = client_settings.copy() | default_trainer_settings.copy()
+    settings = trainer_settings.copy()
     if args.output_dir:
         settings['output_dir'] = args.output_dir
     if args.model_path:
@@ -115,14 +115,13 @@ def main():
     if args.episode_length:
         settings['episode_length'] = args.episode_length
     if args.dish_radius:
-        settings['dish_radius'] = args.dish_radius
+        settings['general']['dish_radius'] = args.dish_radius
     if args.food_quantity:
-        settings['food_quantity'] = args.food_quantity
+        settings['food']['quantity'] = args.food_quantity
     if args.obstacle_quantity:
-        settings['obstacle_quantity'] = args.obstacle_quantity
+        settings['obstacle']['quantity'] = args.obstacle_quantity
     if args.random_model:
         settings['random_model'] = args.random_model
-    settings['render'] = False  # Disable rendering
     os.makedirs(settings['output_dir'], exist_ok=True)
     trainer = Trainer(settings)
     trainer.train()

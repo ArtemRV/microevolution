@@ -1,42 +1,69 @@
 # Default settings shared by client and server
 default_settings = {
-    'width': 1200,
-    'height': 800,
-    'dish_radius': 250,
-    'organism_radius': 10,
-    'food_radius': 5,
-    'obstacle_radius': 15,
-    'food_quantity': 20,
-    'obstacle_quantity': 5,
-    'grid_size': 50,
-    'max_speed': 5.0,
-    'food_max_speed': 1.0,
-    'obstacle_max_speed': 2.0,
-    'food_push_speed': 2.0,
-    'max_acceleration': 1.0,
-    'initial_energy': 200.0,
-    'energy_per_food': 20.0,
-    'energy_per_step': 0.05,
-    'episode_length': 500,
+    'organism': {
+        'radius': 10,
+        'max_speed': 5,
+        'initial_energy': 100,
+        'max_acceleration': 1,
+        'energy_per_food': 20,
+        'energy_per_step': 0.05,
+        'enabled': True
+    },
+    'food': {
+        'radius': 5,
+        'spawn_rate': 0.1,
+        'quantity': 20,
+        'enabled': True
+    },
+    'obstacle': {
+        'radius': 15,
+        'max_speed': 2,
+        'quantity': 5,
+        'enabled': True
+    },
+    'general': {
+        'width': 1200,
+        'height': 800,
+        'dish_radius': 250,
+        'grid_size': 50,
+    }
 }
 
-default_trainer_settings = {
-    'random_model': True,
-    'output_dir': '.\output',
-    'model_path': None,
-}
-
-# Client-specific settings (extend default_settings)
-client_settings = {
-    **default_settings,
+training_settings = {
     'episodes': 1000,
+    'episode_length': 500,
     'actor_lr': 5e-4,
     'critic_lr': 1e-3,
     'gamma': 0.99,
     'tau': 0.005,
     'batch_size': 128,
     'memory_size': 100000,
-    'render': True
+    'rewards_enabled': True,
+}
+
+trainer_settings = {
+    **default_settings,
+    **training_settings,
+    'random_model': True,
+    'rendering_enabled': False,
+    'output_dir': 'output',
+    'model_path': None,
+}
+
+# Client-specific settings (extend default_settings)
+client_settings = {
+    **default_settings,
+    **training_settings,
+    'random_model': True,
+    'rendering_enabled': True,
+    'output_dir': 'output',
+}
+
+server_settings = {
+    **default_settings,
+    'rewards_enabled': False,
+    'rendering_enabled': True,
+    'output_dir': 'output',
 }
 
 # Colors

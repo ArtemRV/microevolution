@@ -7,8 +7,8 @@ from werkzeug.utils import secure_filename
 import uuid
 import torch
 import numpy as np
-from common.settings import default_settings
-from common.core import Environment
+from common.settings import server_settings
+from common.game_object import Environment
 from common.models import Actor
 from common.utils import logging
 from server.simulation import run_simulation
@@ -64,9 +64,9 @@ def upload_model():
         actor_path = os.path.join(app.config['UPLOAD_FOLDER'], f'actor_{uuid.uuid4()}_{actor_filename}')
         actor_file.save(actor_path)
 
-        env = Environment(default_settings)
+        env = Environment(server_settings)
         state_dim = len(env.reset())
-        agent = DDPGAgent(state_dim, 2, default_settings)
+        agent = DDPGAgent(state_dim, 2, server_settings)
         agent.load_model(actor_path)
 
         return jsonify({
@@ -88,12 +88,12 @@ def handle_simulation(data):
             emit('simulation_error', {'error': 'Actor path is required'})
             return
 
-        env = Environment(default_settings)
+        env = Environment(server_settings)
         state_dim = len(env.reset())
-        agent = DDPGAgent(state_dim, 2, default_settings)
+        agent = DDPGAgent(state_dim, 2, server_settings)
         agent.load_model(actor_path)
 
-        results, plot_path = run_simulation(agent, default_settings, lives, sid, socketio)
+        results, plot_path = run_simulation(agent, server_settings, lives, sid, socketio)
 
         emit('simulation_complete', {
             'results': results,

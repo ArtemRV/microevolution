@@ -2,9 +2,9 @@ import matplotlib.pyplot as plt
 import os
 import uuid
 import time
+from common.game_object import Environment
 
 def run_simulation(agent, settings, lives=3, sid=None, socketio=None):
-    from common.core import Environment
 
     env = Environment(settings)
     state_dim = len(env.reset())
@@ -22,7 +22,7 @@ def run_simulation(agent, settings, lives=3, sid=None, socketio=None):
         done = False
         step = 0
 
-        while not done and step < settings['episode_length']:
+        while not done:
             action = agent.act(state)
             next_state, reward, done = env.step(action, track_approach=False)
             state = next_state

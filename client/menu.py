@@ -21,7 +21,7 @@ writer = SummaryWriter(log_dir="output/runs/micro_evolution_" + str(uuid.uuid4()
 pygame.init()
 
 # Constants
-WINDOW_SIZE = (default_settings['width'], default_settings['height'])
+WINDOW_SIZE = (default_settings['general']['width'], default_settings['general']['height'])
 FPS = 120
 THEME = pygame_menu.themes.THEME_SOLARIZED
 
@@ -134,7 +134,7 @@ class SettingsScene(Scene):
                        'episode_length', 'episodes']:
                 input_type = INPUT_INT
                 default_value = str(int(value)) if isinstance(value, (int, float)) else str(value)
-            elif key == 'render':
+            elif key == 'rendering_enabled':
                 input_type = INPUT_TEXT
                 default_value = str(value).lower()
             else:
@@ -158,7 +158,7 @@ class SettingsScene(Scene):
                        'obstacle_radius', 'food_quantity', 'obstacle_quantity', 'grid_size',
                        'episode_length', 'episodes']:
                 self.settings[key] = int(value) if value.strip() else 0
-            elif key == 'render':
+            elif key == 'rendering_enabled':
                 self.settings[key] = value.lower() == 'true'
             else:
                 self.settings[key] = float(value) if value.strip() else 0.0
@@ -182,7 +182,7 @@ class SettingsScene(Scene):
                        'obstacle_radius', 'food_quantity', 'obstacle_quantity', 'grid_size',
                        'episode_length', 'episodes']:
                 field.set_value(str(int(self.settings[key])))
-            elif key == 'render':
+            elif key == 'rendering_enabled':
                 field.set_value(str(self.settings[key]).lower())
             else:
                 field.set_value(str(float(self.settings[key])))
@@ -199,7 +199,7 @@ class SimulationScene(Scene):
         self.settings = scene_manager.settings
         self.model_path = scene_manager.model_path
         client_settings.update(self.settings)
-        self.output_dir = ".\output"
+        self.output_dir = client_settings['output_dir']
         os.makedirs(self.output_dir, exist_ok=True)
         self.screen = screen
         self.env = RenderableEnvironment(client_settings, screen)
@@ -241,7 +241,7 @@ class SimulationScene(Scene):
             sys.exit()
         elif event.type == pygame.VIDEORESIZE:
             self.screen = pygame.display.set_mode((event.w, event.h), pygame.RESIZABLE)
-            self.env.scale = min(event.w / client_settings['width'], event.h / client_settings['height'])
+            self.env.scale = min(event.w / client_settings['general']['width'], event.h / client_settings['general']['height'])
         elif event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
                 self.menu.enable() if not self.menu.is_enabled() else self.menu.disable()
@@ -266,7 +266,7 @@ class SimulationScene(Scene):
             self.episode_reward += reward
             self.step += 1
 
-            if client_settings['render']:
+            if client_settings['rendering_enabled']:
                 self.clock.tick(FPS)
 
             if losses:
@@ -339,7 +339,7 @@ class SimulationScene(Scene):
         if self.menu.is_enabled():
             self.menu.draw(self.screen)
         else:
-            if client_settings['render']:
+            if client_settings['rendering_enabled']:
                 self.env.render(self.plotter, self.log_messages)
         pygame.display.flip()
 
@@ -377,7 +377,7 @@ class SceneManager:
 
 async def main():
     # Initialize screen
-    base_width, base_height = client_settings['width'], client_settings['height']
+    base_width, base_height = client_settings['general']['width'], client_settings['general']['height']
     screen = pygame.display.set_mode((base_width, base_height), pygame.RESIZABLE)
     pygame.display.set_caption("Micro Evolution with DDPG")
 
