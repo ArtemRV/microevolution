@@ -5,24 +5,33 @@ class GameObject:
     def __init__(self, env, settings, object_type, existing_objects=None):
         self.env = env
         self.settings = settings
-        self.object_type = object_type
+        self.object_type = object_type  # 'organism', 'food', or 'obstacle'
         self.radius = settings[self.object_type]['radius']
         self.pos = self._initialize_position(existing_objects)
         self.vel = np.array([0.0, 0.0])
 
     def _initialize_position(self, existing_objects):
         """Initialize position within the dish, ensuring no overlap with existing objects."""
+        if self.object_type == 'organism' and not self.settings['organism']['random_start']:
+            return np.array([self.env.dish_center[0], self.env.dish_center[1]], dtype=float)
+        
         max_attempts = 100
+        # Use start_radius for organism, dish_radius for others
+        max_radius = (self.settings['organism']['start_radius'] if self.object_type == 'organism' 
+                     else self.env.dish_radius)
         for _ in range(max_attempts):
             theta = np.random.uniform(0, 2 * np.pi)
-            r = np.random.uniform(0, self.env.dish_radius - self.radius)
+            r = np.random.uniform(0, max_radius - self.radius)
             pos = np.array([
                 self.env.dish_center[0] + r * np.cos(theta),
                 self.env.dish_center[1] + r * np.sin(theta)
             ])
             if is_position_free(pos, self.radius, self.env.dish_center, self.env.dish_radius, existing_objects or [], 5.0):
                 return pos
-        return np.array([self.env.dish_center[0], self.env.dish_center[1]], dtype=float)
+        raise ValueError(
+            f"Failed to place {self.object_type} after {max_attempts} attempts. "
+            "Possible reasons: too many objects, dish radius too small, or object radius too large."
+        )
 
     def move(self):
         """Update position based on velocity and handle dish boundary collisions."""
@@ -44,7 +53,7 @@ class Organism(GameObject):
         self.prev_action = np.array([0.0, 0.0])
 
     def reset(self):
-        self.pos = np.array([self.env.dish_center[0], self.env.dish_center[1]], dtype=float)
+        self.pos = self._initialize_position([])  # No existing objects at reset
         self.vel = np.array([0.0, 0.0])
         self.energy = self.settings['organism']['initial_energy']
         self.food_eaten = 0
@@ -136,7 +145,6 @@ class Obstacle(GameObject):
     def move(self):
         super().move()
 
-# Update Environment class to use new settings structure
 class Environment:
     def __init__(self, settings, obstacle_quantity=None):
         self.settings = settings
@@ -144,6 +152,15 @@ class Environment:
         self.height = settings['general']['height']
         self.dish_radius = settings['general']['dish_radius']
         self.dish_center = (self.width // 2, self.height // 2)
+        
+        # Validate start_radius
+        start_radius = settings['organism'].get('start_radius')
+        if start_radius > self.dish_radius:
+            raise ValueError(
+                f"Organism start_radius ({start_radius}) cannot exceed dish_radius ({self.dish_radius})."
+            )
+        self.settings['organism']['start_radius'] = start_radius
+
         self.agent = Organism(self, settings)
         self.foods = []
         existing_objects = [self.agent]
@@ -243,7 +260,6 @@ class Environment:
             }
         }
 
-# Grid and Reward classes remain unchanged
 class Grid:
     def __init__(self, cell_size, width, height):
         self.cell_size = cell_size

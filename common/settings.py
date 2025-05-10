@@ -7,7 +7,9 @@ default_settings = {
         'max_acceleration': 1,
         'energy_per_food': 20,
         'energy_per_step': 0.05,
-        'enabled': True
+        'enabled': True,
+        'random_start': True,
+        'start_radius': 230,
     },
     'food': {
         'radius': 5,
@@ -64,6 +66,12 @@ server_settings = {
     'rewards_enabled': False,
     'rendering_enabled': True,
     'output_dir': 'output',
+    'general': {
+        'width': 600,
+        'height': 600,
+        'dish_radius': 250,
+        'grid_size': 50,
+    },
 }
 
 # Colors
