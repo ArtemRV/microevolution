@@ -24,7 +24,7 @@ def run_simulation(agent, settings, lives=3, sid=None, socketio=None):
 
         while not done:
             action = agent.act(state)
-            next_state, reward, done = env.step(action, track_approach=False)
+            next_state, reward, done = env.step(action)
             state = next_state
             total_energy = env.agent.energy
             food_eaten = env.agent.food_eaten

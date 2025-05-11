@@ -259,7 +259,7 @@ class SimulationScene(Scene):
 
         if not self.done and self.step < client_settings['episode_length']:
             action = self.agent.act(self.state)
-            next_state, reward, self.done = self.env.step(action, track_approach=True)
+            next_state, reward, self.done = self.env.step(action)
             self.agent.remember(self.state, action, reward, next_state, self.done)
             losses = self.agent.replay()
             self.state = next_state

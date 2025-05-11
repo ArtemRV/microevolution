@@ -136,7 +136,7 @@ def test_policy(agent, env, episodes=5):
         step = 0
         while not done and step < env.settings['episode_length']:
             action = agent.act(state, add_noise=False)
-            next_state, reward, done = env.step(action, track_approach=True)
+            next_state, reward, done = env.step(action)
             state = next_state
             episode_reward += reward
             step += 1

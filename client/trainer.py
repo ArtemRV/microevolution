@@ -41,7 +41,7 @@ class Trainer:
 
             while not done and step < self.settings['episode_length']:
                 action = self.agent.act(state)
-                next_state, reward, done = self.env.step(action, track_approach=True)
+                next_state, reward, done = self.env.step(action)
                 self.agent.remember(state, action, reward, next_state, done)
                 losses = self.agent.replay()
                 state = next_state

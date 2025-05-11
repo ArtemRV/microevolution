@@ -28,16 +28,46 @@ default_settings = {
         'height': 800,
         'dish_radius': 250,
         'grid_size': 50,
-    }
+    },
+    "rewards": {
+        "eat": {
+            "value": 20.0,
+            "enabled": True
+        },
+        "dish_collision": {
+            "value": -20.0,
+            "enabled": True,
+            "end_episode": True
+        },
+        "obstacle_collision": {
+            "value": -20.0,
+            "enabled": True,
+            "end_episode": True
+        },
+        "energy": {
+            "value": -0.02,
+            'increment_steps': 50,
+            'increment': 0.02,
+            "enabled": True
+        },
+        "approach": {
+            "value": 0.2,
+            "enabled": True
+        },
+        "survival": {
+            "value": 0.05,
+            "enabled": True
+        }
+    },
 }
 
 training_settings = {
-    'episodes': 1000,
+    'episodes': 5000,
     'episode_length': 500,
     'actor_lr': 5e-4,
     'critic_lr': 1e-3,
     'gamma': 0.99,
-    'tau': 0.005,
+    'tau': 0.005, # Target network update speed
     'batch_size': 128,
     'memory_size': 100000,
     'rewards_enabled': True,

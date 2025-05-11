@@ -21,37 +21,79 @@ class RenderableOrganism(Organism):
         speed = np.linalg.norm(self.vel)
         if speed > self.max_speed and speed > 0:
             self.vel = self.vel / speed * self.max_speed
+        prev_pos = self.pos.copy()
         self.pos += self.vel
         self.prev_action = action
 
-        dist_to_center = np.linalg.norm(self.pos - self.env.dish_center)
-        if dist_to_center > self.env.dish_radius - self.radius:
-            self.env.reward.update(-20, 'dish_collision')
-            return True
+        if not self.settings['rewards_enabled']:
+            return False
 
+        reward_settings = self.settings.get('rewards', {})
+        self.steps_without_food += 1  # Увеличиваем счетчик шагов без еды
+
+        """Approach Reward"""
+        if reward_settings['approach']['enabled']:
+            nearby_foods = [obj for obj in self.env.grid.get_nearby_objects(self.pos) if isinstance(obj, (Food, RenderableFood))]
+            if nearby_foods:
+                closest_food = min(nearby_foods, key=lambda f: np.linalg.norm(self.pos - f.pos))
+                prev_dist = np.linalg.norm(prev_pos - closest_food.pos)
+                curr_dist = np.linalg.norm(self.pos - closest_food.pos)
+                if curr_dist < prev_dist:
+                    self.env.reward.update(reward_settings['approach']['value'], 'approach')
+
+        """Collision with the border"""
+        dist_to_center = np.linalg.norm(self.pos - self.env.dish_center)
+        if dist_to_center > self.env.dish_radius - self.radius and reward_settings['dish_collision']['enabled']:
+            self.env.reward.update(reward_settings['dish_collision']['value'], 'dish_collision')
+            if reward_settings['dish_collision']['end_episode']:
+                return True
+
+        """Checking nearby objects"""
         nearby_objects = self.env.grid.get_nearby_objects(self.pos)
         nearby_foods = [obj for obj in nearby_objects if isinstance(obj, (Food, RenderableFood))]
         nearby_obstacles = [obj for obj in nearby_objects if isinstance(obj, (Obstacle, RenderableObstacle))]
 
-        for food in nearby_foods[:]:
-            if np.linalg.norm(self.pos - food.pos) < self.radius + food.radius:
-                self.env.reward.update(10, 'eat')
-                self.energy += self.settings['organism']['energy_per_food']
-                self.food_eaten += 1
-                if food in self.env.foods:
-                    self.env.foods.remove(food)
-                new_food = RenderableFood(self.env, self.settings, [self] + self.env.obstacles + self.env.foods)
-                self.env.foods.append(new_food)
+        # Награда за еду и сброс штрафа
+        ate_food = False
+        if reward_settings['eat']['enabled']:
+            for food in nearby_foods[:]:
+                if np.linalg.norm(self.pos - food.pos) < self.radius + food.radius:
+                    self.env.reward.update(reward_settings['eat']['value'], 'eat')
+                    self.energy += self.settings['organism']['energy_per_food']
+                    self.food_eaten += 1
+                    ate_food = True
+                    if food in self.env.foods:
+                        self.env.foods.remove(food)
+                    new_food = RenderableFood(self.env, self.settings, [self] + self.env.obstacles + self.env.foods)
+                    self.env.foods.append(new_food)
 
-        for obstacle in nearby_obstacles:
-            if np.linalg.norm(self.pos - obstacle.pos) < self.radius + obstacle.radius:
-                self.env.reward.update(-20, 'obstacle_collision')
+        # Сброс штрафа за энергию при поедании
+        if ate_food:
+            self.steps_without_food = 0
+            self.current_energy_penalty = reward_settings['energy']['value']
+
+        # Нарастающий штраф за энергию
+        if reward_settings['energy']['enabled']:
+            increment_steps = reward_settings['energy']['increment_steps']
+            increment = reward_settings['energy']['increment']
+            if self.steps_without_food >= increment_steps and self.steps_without_food % increment_steps == 0:
+                self.current_energy_penalty -= increment  # Увеличиваем штраф (делаем более отрицательным)
+            self.energy -= self.settings['organism']['energy_per_step']
+            self.env.reward.update(self.current_energy_penalty, 'energy')
+            if self.energy <= 0:
                 return True
 
-        self.energy -= self.settings['organism']['energy_per_step']
-        self.env.reward.update(-self.settings['organism']['energy_per_step'], 'energy')
-        if self.energy <= 0:
-            return True
+        # Столкновение с препятствием
+        if reward_settings['obstacle_collision']['enabled']:
+            for obstacle in nearby_obstacles:
+                if np.linalg.norm(self.pos - obstacle.pos) < self.radius + obstacle.radius:
+                    self.env.reward.update(reward_settings['obstacle_collision']['value'], 'obstacle_collision')
+                    if reward_settings['obstacle_collision']['end_episode']:
+                        return True
+
+        # Награда за выживание
+        if reward_settings['survival']['enabled'] and self.energy > 0:
+            self.env.reward.update(reward_settings['survival']['value'], 'survival')
 
         return False
 

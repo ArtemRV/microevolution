@@ -51,6 +51,9 @@ class Organism(GameObject):
         self.food_eaten = 0
         self.max_speed = settings['organism']['max_speed']
         self.prev_action = np.array([0.0, 0.0])
+        self.steps_without_food = 0
+        self.current_energy_penalty = settings['rewards']['energy']['value']
+
 
     def reset(self):
         self.pos = self._initialize_position([])  # No existing objects at reset
@@ -58,6 +61,8 @@ class Organism(GameObject):
         self.energy = self.settings['organism']['initial_energy']
         self.food_eaten = 0
         self.prev_action = np.array([0.0, 0.0])
+        self.steps_without_food = 0
+        self.current_energy_penalty = self.settings['rewards']['energy']['value']
 
     def move(self, action, foods, obstacles):
         acceleration = np.array(action) * self.settings['organism']['max_acceleration']
@@ -154,7 +159,7 @@ class Environment:
         self.dish_center = (self.width // 2, self.height // 2)
         
         # Validate start_radius
-        start_radius = settings['organism'].get('start_radius')
+        start_radius = settings['organism']['start_radius']
         if start_radius > self.dish_radius:
             raise ValueError(
                 f"Organism start_radius ({start_radius}) cannot exceed dish_radius ({self.dish_radius})."
@@ -205,15 +210,15 @@ class Environment:
         self.update_grid()
         return self.agent.get_state()
 
-    def step(self, action, track_approach=False):
+    def step(self, action):
         self.reward.reset()
-        closest_food = min(self.foods, key=lambda f: np.linalg.norm(self.agent.pos - f.pos), default=None)
-        prev_dist = np.linalg.norm(self.agent.pos - closest_food.pos) if closest_food and track_approach else float('inf')
+        # closest_food = min(self.foods, key=lambda f: np.linalg.norm(self.agent.pos - f.pos), default=None)
+        # prev_dist = np.linalg.norm(self.agent.pos - closest_food.pos) if closest_food and track_approach else float('inf')
         done = self.agent.move(action, self.foods, self.obstacles)
-        if track_approach and closest_food:
-            curr_dist = np.linalg.norm(self.agent.pos - closest_food.pos)
-            if curr_dist < prev_dist:
-                self.reward.update(0.1, 'approach')
+        # if track_approach and closest_food:
+        #     curr_dist = np.linalg.norm(self.agent.pos - closest_food.pos)
+        #     if curr_dist < prev_dist:
+        #         self.reward.update(0.1, 'approach')
         
         for obstacle in self.obstacles:
             obstacle.move()
@@ -256,7 +261,8 @@ class Environment:
                 'obstacle_collision': self.reward.obstacle_collision,
                 'dish_collision': self.reward.dish_collision,
                 'energy': self.reward.energy,
-                'approach': self.reward.approach
+                'approach': self.reward.approach,
+                'survival': self.reward.survival
             }
         }
 
@@ -300,19 +306,22 @@ class Reward:
         self.dish_collision = 0
         self.energy = 0
         self.approach = 0
+        self.survival = 0
 
     def update(self, value, reward_type):
         self.total += value
         if reward_type == 'eat':
             self.eat += value
         elif reward_type == 'obstacle_collision':
-            self.obstacle_collision = value
+            self.obstacle_collision += value
         elif reward_type == 'dish_collision':
-            self.dish_collision = value
+            self.dish_collision += value
         elif reward_type == 'energy':
-            self.energy = value
+            self.energy += value
         elif reward_type == 'approach':
-            self.approach = value
+            self.approach += value
+        elif reward_type == 'survival':
+            self.survival += value
 
     def get(self):
         return self.total

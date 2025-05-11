@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 class Actor(nn.Module):
-    def __init__(self, state_dim, action_dim, hidden_dims=[128, 64]):
+    def __init__(self, state_dim, action_dim, hidden_dims=[256, 256]):
         super(Actor, self).__init__()
         layers = []
         current_dim = state_dim
@@ -22,7 +22,7 @@ class Actor(nn.Module):
         return self.model(state)
 
 class Critic(nn.Module):
-    def __init__(self, state_dim, action_dim, hidden_dims=[128, 64]):
+    def __init__(self, state_dim, action_dim, hidden_dims=[512, 256]):
         super(Critic, self).__init__()
         layers = []
         current_dim = state_dim + action_dim
