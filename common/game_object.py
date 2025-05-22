@@ -2,21 +2,21 @@ import numpy as np
 from common.utils import is_position_free
 
 class GameObject:
+    """Базовый класс для игровых объектов."""
     def __init__(self, env, settings, object_type, existing_objects=None):
         self.env = env
         self.settings = settings
         self.object_type = object_type  # 'organism', 'food', or 'obstacle'
-        self.radius = settings[self.object_type]['radius']
+        self.radius = settings[object_type]['radius']
         self.pos = self._initialize_position(existing_objects)
         self.vel = np.array([0.0, 0.0])
+        self.render_component = None  # Для рендеринга
 
     def _initialize_position(self, existing_objects):
-        """Initialize position within the dish, ensuring no overlap with existing objects."""
         if self.object_type == 'organism' and not self.settings['organism']['random_start']:
             return np.array([self.env.dish_center[0], self.env.dish_center[1]], dtype=float)
         
         max_attempts = 100
-        # Use start_radius for organism, dish_radius for others
         max_radius = (self.settings['organism']['start_radius'] if self.object_type == 'organism' 
                      else self.env.dish_radius)
         for _ in range(max_attempts):
@@ -29,7 +29,7 @@ class GameObject:
             if is_position_free(pos, self.radius, self.env.dish_center, self.env.dish_radius, existing_objects or [], 5.0):
                 return pos
         raise ValueError(
-            f"Failed to place {self.object_type} after {max_attempts} attempts. "
+            f"Failed to place {self.object_type} after {max_attempts} attempts."
             "Possible reasons: too many objects, dish radius too small, or object radius too large."
         )
 
@@ -45,6 +45,7 @@ class GameObject:
             self.pos = self.env.dish_center + direction * (self.env.dish_radius - self.radius)
 
 class Organism(GameObject):
+    """Класс для организма."""
     def __init__(self, env, settings):
         super().__init__(env, settings, 'organism')
         self.energy = settings['organism']['initial_energy']
@@ -53,16 +54,17 @@ class Organism(GameObject):
         self.prev_action = np.array([0.0, 0.0])
         self.steps_without_food = 0
         self.current_energy_penalty = settings['rewards']['energy']['value']
-
+        self.step_count = 0  # Счетчик шагов для награды за выживание
 
     def reset(self):
-        self.pos = self._initialize_position([])  # No existing objects at reset
+        self.pos = self._initialize_position([])
         self.vel = np.array([0.0, 0.0])
         self.energy = self.settings['organism']['initial_energy']
         self.food_eaten = 0
         self.prev_action = np.array([0.0, 0.0])
         self.steps_without_food = 0
         self.current_energy_penalty = self.settings['rewards']['energy']['value']
+        self.step_count = 0  # Сбрасываем счетчик шагов при сбросе
 
     def move(self, action, foods, obstacles):
         acceleration = np.array(action) * self.settings['organism']['max_acceleration']
@@ -70,37 +72,79 @@ class Organism(GameObject):
         speed = np.linalg.norm(self.vel)
         if speed > self.max_speed and speed > 0:
             self.vel = self.vel / speed * self.max_speed
-        super().move()
+        prev_pos = self.pos.copy()
+        self.pos += self.vel
         self.prev_action = action
+        self.step_count += 1  # Увеличиваем счетчик шагов
 
+        if not self.settings['rewards_enabled']:
+            return False
+
+        reward_settings = self.settings.get('rewards', {})
+        self.steps_without_food += 1
+
+        """Approach Reward"""
+        if reward_settings['approach']['enabled']:
+            nearby_foods = [obj for obj in self.env.grid.get_nearby_objects(self.pos) if obj.object_type == 'food']
+            if nearby_foods:
+                closest_food = min(nearby_foods, key=lambda f: np.linalg.norm(self.pos - f.pos))
+                prev_dist = np.linalg.norm(prev_pos - closest_food.pos)
+                curr_dist = np.linalg.norm(self.pos - closest_food.pos)
+                if curr_dist < prev_dist:
+                    self.env.reward.update(reward_settings['approach']['value'], 'approach')
+
+        """Collision with the border"""
         dist_to_center = np.linalg.norm(self.pos - self.env.dish_center)
-        if dist_to_center > self.env.dish_radius - self.radius:
-            self.env.reward.update(-20, 'dish_collision')
-            return True
-
-        nearby_objects = self.env.grid.get_nearby_objects(self.pos)
-        nearby_foods = [obj for obj in nearby_objects if isinstance(obj, Food)]
-        nearby_obstacles = [obj for obj in nearby_objects if isinstance(obj, Obstacle)]
-
-        for food in nearby_foods[:]:
-            if np.linalg.norm(self.pos - food.pos) < self.radius + food.radius:
-                self.env.reward.update(10, 'eat')
-                self.energy += self.settings['organism']['energy_per_food']
-                self.food_eaten += 1
-                if food in self.env.foods:
-                    self.env.foods.remove(food)
-                new_food = Food(self.env, self.settings, [self] + self.env.obstacles + self.env.foods)
-                self.env.foods.append(new_food)
-
-        for obstacle in nearby_obstacles:
-            if np.linalg.norm(self.pos - obstacle.pos) < self.radius + obstacle.radius:
-                self.env.reward.update(-20, 'obstacle_collision')
+        if dist_to_center > self.env.dish_radius - self.radius and reward_settings['dish_collision']['enabled']:
+            self.env.reward.update(reward_settings['dish_collision']['value'], 'dish_collision')
+            if reward_settings['dish_collision']['end_episode']:
                 return True
 
-        self.energy -= self.settings['organism']['energy_per_step']
-        self.env.reward.update(-self.settings['organism']['energy_per_step'], 'energy')
-        if self.energy <= 0:
-            return True
+        """Checking nearby objects"""
+        nearby_objects = self.env.grid.get_nearby_objects(self.pos)
+        nearby_foods = [obj for obj in nearby_objects if obj.object_type == 'food']
+        nearby_obstacles = [obj for obj in nearby_objects if obj.object_type == 'obstacle']
+
+        """Food reward and penalty reset"""
+        ate_food = False
+        if reward_settings['eat']['enabled']:
+            for food in nearby_foods[:]:
+                if np.linalg.norm(self.pos - food.pos) < self.radius + food.radius:
+                    self.env.reward.update(reward_settings['eat']['value'], 'eat')
+                    self.energy += self.settings['organism']['energy_per_food']
+                    self.food_eaten += 1
+                    ate_food = True
+                    if food in self.env.foods:
+                        self.env.foods.remove(food)
+                    self.env.add_food([self] + self.env.obstacles + self.env.foods)
+
+        """Reset energy penalty when eating"""
+        if ate_food:
+            self.steps_without_food = 0
+            self.current_energy_penalty = reward_settings['energy']['value']
+
+        """Growing energy penalty"""
+        if reward_settings['energy']['enabled']:
+            increment_steps = reward_settings['energy']['increment_steps']
+            increment = reward_settings['energy']['increment']
+            if self.steps_without_food >= increment_steps and self.steps_without_food % increment_steps == 0:
+                self.current_energy_penalty -= increment
+            self.energy -= self.settings['organism']['energy_per_step']
+            self.env.reward.update(self.current_energy_penalty, 'energy')
+            if self.energy <= 0:
+                return True
+
+        """Collision with an obstacle"""
+        if reward_settings['obstacle_collision']['enabled']:
+            for obstacle in nearby_obstacles:
+                if np.linalg.norm(self.pos - obstacle.pos) < self.radius + obstacle.radius:
+                    self.env.reward.update(reward_settings['obstacle_collision']['value'], 'obstacle_collision')
+                    if reward_settings['obstacle_collision']['end_episode']:
+                        return True
+
+        """Reward for survival"""
+        if reward_settings['survival']['enabled'] and self.energy > 0:
+            self.env.reward.update(reward_settings['survival']['value'] + reward_settings['survival']['increment'] * (self.step_count // reward_settings['survival']['increment_steps']), 'survival')
 
         return False
 
@@ -136,6 +180,7 @@ class Organism(GameObject):
         return np.array(state, dtype=np.float32)
 
 class Food(GameObject):
+    """Food class."""
     def __init__(self, env, settings, existing_objects):
         super().__init__(env, settings, 'food', existing_objects)
 
@@ -143,6 +188,7 @@ class Food(GameObject):
         super().move()
 
 class Obstacle(GameObject):
+    """Obstacle class."""
     def __init__(self, env, settings, existing_objects):
         super().__init__(env, settings, 'obstacle', existing_objects)
         self.vel = np.random.uniform(-settings['obstacle']['max_speed'], settings['obstacle']['max_speed'], 2)
@@ -151,14 +197,18 @@ class Obstacle(GameObject):
         super().move()
 
 class Environment:
-    def __init__(self, settings, obstacle_quantity=None):
+    """Базовая игровая среда."""
+    def __init__(self, settings, food_class=Food, obstacle_class=Obstacle, organism_class=Organism, episode=0):
         self.settings = settings
+        self.episode = episode
         self.width = settings['general']['width']
         self.height = settings['general']['height']
         self.dish_radius = settings['general']['dish_radius']
         self.dish_center = (self.width // 2, self.height // 2)
+        self.food_class = food_class
+        self.obstacle_class = obstacle_class
+        self.organism_class = organism_class
         
-        # Validate start_radius
         start_radius = settings['organism']['start_radius']
         if start_radius > self.dish_radius:
             raise ValueError(
@@ -166,23 +216,36 @@ class Environment:
             )
         self.settings['organism']['start_radius'] = start_radius
 
-        self.agent = Organism(self, settings)
-        self.foods = []
-        existing_objects = [self.agent]
-        for _ in range(settings['food']['quantity']):
-            food = Food(self, settings, existing_objects)
-            self.foods.append(food)
-            existing_objects.append(food)
-        self.obstacles = []
-        obstacle_quantity = obstacle_quantity or settings['obstacle']['quantity']
-        for _ in range(obstacle_quantity):
-            obstacle = Obstacle(self, settings, existing_objects)
-            self.obstacles.append(obstacle)
-            existing_objects.append(obstacle)
+        self.agent = self.organism_class(self, settings)
         self.grid_size = settings['general']['grid_size']
         self.grid = Grid(self.grid_size, self.width, self.height)
         self.reward = Reward()
+        
+        self.foods = []
+        self.obstacles = []
+        self._initialize_objects([self.agent])
         self.update_grid()
+
+    def _initialize_objects(self, existing_objects):
+        """Инициализация еды и препятствий."""
+        object_types = [
+            ('food', self.food_class, self.foods),
+            ('obstacle', self.obstacle_class, self.obstacles)
+        ]
+        
+        for entity, cls, storage in object_types:
+            if self.settings[entity]['enabled']:
+                storage.clear()  # Очищаем список перед добавлением новых объектов
+                quantity = self._get_quantity(entity)
+                for _ in range(quantity):
+                    obj = cls(self, self.settings, existing_objects)
+                    storage.append(obj)
+                    existing_objects.append(obj)
+
+    def add_food(self, existing_objects):
+        """Добавление новой еды через указанный класс."""
+        new_food = self.food_class(self, self.settings, existing_objects)
+        self.foods.append(new_food)
 
     def update_grid(self):
         self.grid.clear()
@@ -194,31 +257,21 @@ class Environment:
 
     def reset(self):
         self.agent.reset()
-        self.foods = []
         existing_objects = [self.agent]
-        for _ in range(self.settings['food']['quantity']):
-            food = Food(self, self.settings, existing_objects)
-            self.foods.append(food)
-            existing_objects.append(food)
-        self.obstacles = []
-        obstacle_quantity = len(self.obstacles) or self.settings['obstacle']['quantity']
-        for _ in range(obstacle_quantity):
-            obstacle = Obstacle(self, self.settings, existing_objects)
-            self.obstacles.append(obstacle)
-            existing_objects.append(obstacle)
+        self._initialize_objects(existing_objects)
         self.reward.reset()
         self.update_grid()
         return self.agent.get_state()
 
+    def _get_quantity(self, entity):
+        settings = self.settings[entity]
+        if self.settings['rewards_enabled'] and self.settings.get('increment_' + entity):
+            return settings['min_quantity'] + (self.episode // self.settings['increment_episodes']) * settings['increment_quantity']
+        return settings['quantity']
+
     def step(self, action):
         self.reward.reset()
-        # closest_food = min(self.foods, key=lambda f: np.linalg.norm(self.agent.pos - f.pos), default=None)
-        # prev_dist = np.linalg.norm(self.agent.pos - closest_food.pos) if closest_food and track_approach else float('inf')
         done = self.agent.move(action, self.foods, self.obstacles)
-        # if track_approach and closest_food:
-        #     curr_dist = np.linalg.norm(self.agent.pos - closest_food.pos)
-        #     if curr_dist < prev_dist:
-        #         self.reward.update(0.1, 'approach')
         
         for obstacle in self.obstacles:
             obstacle.move()

@@ -4,6 +4,7 @@ import uuid
 import os
 from client.ddpg import DDPGAgent
 from client.plotting import test_policy
+from client.model_loader import ModelLoader
 from common.game_object import Environment
 from common.settings import trainer_settings
 from common.utils import logging
@@ -14,19 +15,30 @@ class Trainer:
     def __init__(self, settings):
         self.settings = settings.copy()
         self.output_dir = self.settings['output_dir']
-        self.model_path = self.settings['model_path']
+        self.model_path = self.settings['load_model']['model_path']
         self.episodes = self.settings['episodes']
-        self.random_model = self.settings['random_model']
+        self.random_model = self.settings['load_model']['random_model']
         self.writer = SummaryWriter(log_dir=os.path.join(self.output_dir, "runs", f"train_{uuid.uuid4()}"))
         self.env = Environment(self.settings)
         self.state_dim = len(self.env.reset())
         self.action_dim = 2
         self.agent = DDPGAgent(self.state_dim, self.action_dim, self.settings)
-        if not self.random_model:
+        self.model_loader = ModelLoader(self.settings)
+        
+        # Load model based on settings
+        if self.random_model:
+            self.model_loader.load_model(self.agent, 'random')
+        else:
             if self.model_path:
-                self.agent.load(self.model_path)
+                # Convert model_path to dictionary format expected by ModelLoader
+                model_path_dict = {
+                    'actor': self.model_path.replace('.pth', '_actor.pth'),
+                    'critic': self.model_path.replace('.pth', '_critic.pth')
+                }
+                self.model_loader.load_model(self.agent, 'custom', model_path_dict)
             else:
-                self.agent.load_best(self.model_path)
+                self.model_loader.load_model(self.agent, 'best')
+
         self.total_rewards = []
         self.running_avg_rewards = []
         self.log_messages = []
@@ -92,19 +104,18 @@ def parse_args():
     """Parse command-line arguments for training."""
     parser = argparse.ArgumentParser(description="Micro Evolution Training with DDPG")
     parser.add_argument('--output-dir', type=str, help="Directory to save models and logs")
-    parser.add_argument('--model-path', type=str, help="Path to pre-trained model")
+    parser.add_argument('--model-path', type=str, help="Path to pre-trained model (base name without _actor/_critic)")
     parser.add_argument('--episodes', type=int, default=1000, help="Number of training episodes")
     parser.add_argument('--episode-length', type=int, help="Length of each episode")
     parser.add_argument('--dish-radius', type=int, help="Dish radius")
     parser.add_argument('--food-quantity', type=int, help="Number of food items")
     parser.add_argument('--obstacle-quantity', type=int, help="Number of obstacles")
-    parser.add_argument('--random-model', action='store_false', help="Start with a randomly initialized model, default=True")
+    parser.add_argument('--random-model', type=bool, help="Start with a randomly initialized model")
     return parser.parse_args()
 
 def main():
     """CLI entry point for training."""
     args = parse_args()
-    print(args)
     settings = trainer_settings.copy()
     if args.output_dir:
         settings['output_dir'] = args.output_dir

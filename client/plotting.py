@@ -127,7 +127,7 @@ def plot_training_progress(total_rewards, settings):
     except Exception as e:
         logging.error(f"Failed to save plot: {e}")
 
-def test_policy(agent, env, episodes=5):
+def test_policy(agent, env, episodes=10):
     total_rewards = []
     for _ in range(episodes):
         state = env.reset()

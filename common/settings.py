@@ -15,12 +15,16 @@ default_settings = {
         'radius': 5,
         'spawn_rate': 0.1,
         'quantity': 20,
+        'min_quantity': 10,
+        'increment_quantity': 0,
         'enabled': True
     },
     'obstacle': {
         'radius': 15,
         'max_speed': 2,
         'quantity': 5,
+        'min_quantity': 3,
+        'increment_quantity': 0,
         'enabled': True
     },
     'general': {
@@ -31,64 +35,75 @@ default_settings = {
     },
     "rewards": {
         "eat": {
-            "value": 20.0,
+            "value": 100.0,
             "enabled": True
         },
         "dish_collision": {
-            "value": -20.0,
+            "value": -100.0,
             "enabled": True,
             "end_episode": True
         },
         "obstacle_collision": {
             "value": -20.0,
-            "enabled": True,
-            "end_episode": True
+            "enabled": False,
+            "end_episode": False
         },
         "energy": {
-            "value": -0.02,
-            'increment_steps': 50,
-            'increment': 0.02,
+            "value": -1,
+            'increment_steps': 20,
+            'increment': 0.5,
             "enabled": True
         },
         "approach": {
-            "value": 0.2,
+            "value": 5,
             "enabled": True
         },
         "survival": {
-            "value": 0.05,
+            "value": 0.5,
+            'increment_steps': 50,
+            'increment': 0.5,
             "enabled": True
         }
     },
 }
 
 training_settings = {
-    'episodes': 5000,
+    'episodes': 3000,
     'episode_length': 500,
     'actor_lr': 5e-4,
     'critic_lr': 1e-3,
     'gamma': 0.99,
-    'tau': 0.005, # Target network update speed
+    'tau': 0.001, #0.005, # Target network update speed
     'batch_size': 128,
     'memory_size': 100000,
     'rewards_enabled': True,
+    # Additional settings
+    'increment_obstacle': True,
+    'increment_food': True,
+    'increment_episodes': 100,
 }
 
 trainer_settings = {
     **default_settings,
     **training_settings,
-    'random_model': True,
     'rendering_enabled': False,
     'output_dir': 'output',
-    'model_path': None,
+    'load_model': {
+        'random_model': True,
+        'model_path': None,
+    }
 }
 
 # Client-specific settings (extend default_settings)
 client_settings = {
     **default_settings,
     **training_settings,
-    'random_model': True,
     'rendering_enabled': True,
     'output_dir': 'output',
+    'load_model': {
+        'random_model': False,
+        'model_path': None,
+    }
 }
 
 server_settings = {

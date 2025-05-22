@@ -8,6 +8,7 @@ import json
 import numpy as np
 from common.models import Actor, Critic
 from common.utils import logging
+from client.model_loader import ModelLoader
 
 class OUNoise:
     def __init__(self, action_dim, mu=0.0, theta=0.15, sigma=0.1, decay=0.995):
@@ -50,6 +51,7 @@ class DDPGAgent:
         self.settings = settings
         self.best_test_reward = float('-inf')
         self.best_model_info = {}
+        self.model_loader = ModelLoader(settings)
 
     def act(self, state, add_noise=True):
         state = torch.FloatTensor(state).unsqueeze(0).to(self.device)
@@ -136,21 +138,10 @@ class DDPGAgent:
         except Exception as e:
             logging.error(f"Failed to save models: {e}")
 
-    def load_best(self, model_path):
-        try:
-            best_model_path = os.path.join(os.path.dirname(model_path), "best_model_info.json")
-            if os.path.exists(best_model_path):
-                with open(best_model_path, 'r') as f:
-                    best_model_info = json.load(f)
-                actor_path = best_model_info['actor_path']
-                critic_path = best_model_info['critic_path']
-                self.actor.load_state_dict(torch.load(actor_path, weights_only=True))
-                self.critic.load_state_dict(torch.load(critic_path, weights_only=True))
-                self.actor_target.load_state_dict(self.actor.state_dict())
-                self.critic_target.load_state_dict(self.critic.state_dict())
-                self.best_test_reward = best_model_info['test_reward']
-                logging.info(f"Loaded best model from {actor_path} with test reward {self.best_test_reward:.2f}")
-            else:
-                logging.info("No best model found, starting from scratch")
-        except Exception as e:
-            logging.error(f"Failed to load best model: {e}")
+    def load_model(self, model_path):
+        """Loads a custom model using ModelLoader."""
+        return self.model_loader.load_model(self, 'custom', model_path)
+
+    def load_best_model(self):
+        """Loads the best model using ModelLoader."""
+        return self.model_loader.load_model(self, 'best')
