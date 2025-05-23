@@ -54,21 +54,15 @@ class MainMenuScene(Scene):
     def __init__(self, screen, scene_manager):
         super().__init__(screen, scene_manager)
         self.menu = pygame_menu.Menu('Micro Evolution Menu', WINDOW_SIZE[0], WINDOW_SIZE[1], theme=THEME)
+        self.menu.add.button('Start New Simulation', self.start_new_simulation)
         self.menu.add.button('Load Model', self.switch_to_load_model)
         self.menu.add.button('Adjust Settings', self.switch_to_settings)
-        self.menu.add.button('Start Simulation', self.start_simulation)
         self.menu.add.button('Exit', pygame_menu.events.EXIT)
 
-    def switch_to_load_model(self):
-        """Switch to load model scene."""
-        self.scene_manager.set_scene(LoadModelScene(self.screen, self.scene_manager))
-
-    def switch_to_settings(self):
-        """Switch to settings scene."""
-        self.scene_manager.set_scene(SettingsScene(self.screen, self.scene_manager))
-
-    def start_simulation(self):
-        """Confirm before starting simulation."""
+    def start_new_simulation(self):
+        """Start a new simulation with random model settings."""
+        self.scene_manager.settings['load_model']['random_model'] = True
+        self.scene_manager.model_path = None
         confirmation_menu = pygame_menu.Menu('Confirm Simulation', WINDOW_SIZE[0], WINDOW_SIZE[1], theme=THEME)
         confirmation_menu.add.label("Simulation Settings:", align=ALIGN_LEFT)
         for key, value in self.scene_manager.settings.items():
@@ -81,12 +75,20 @@ class MainMenuScene(Scene):
         confirmation_menu.add.button('Back', lambda: self.scene_manager.set_scene(MainMenuScene(self.screen, self.scene_manager)))
         self.scene_manager.set_scene(Scene(self.screen, self.scene_manager, menu=confirmation_menu))
 
+    def switch_to_load_model(self):
+        """Switch to load model scene."""
+        self.scene_manager.set_scene(LoadModelScene(self.screen, self.scene_manager))
+
+    def switch_to_settings(self):
+        """Switch to settings scene."""
+        self.scene_manager.set_scene(SettingsScene(self.screen, self.scene_manager))
+
 class LoadModelScene(Scene):
     """Load model scene."""
     def __init__(self, screen, scene_manager):
         super().__init__(screen, scene_manager)
         self.model_loader = ModelLoader(scene_manager.settings)
-        self.model_type = 'random' if scene_manager.settings['load_model']['random_model'] else 'best' if scene_manager.settings['load_model']['model_path'] is None else 'custom'
+        self.model_type = 'best' if scene_manager.settings['load_model']['model_path'] is None else 'custom'
         self.model_path = scene_manager.model_path or None
         self.menu = pygame_menu.Menu('Choose Model', WINDOW_SIZE[0], WINDOW_SIZE[1], theme=THEME)
 
@@ -110,15 +112,14 @@ class LoadModelScene(Scene):
             background_color=(50, 50, 50)
         )
 
-        # Model type selector
+        # Model type selector (removed random option)
         self.model_selector = self.menu.add.dropselect(
             title='Model Type: ',
             items=[
-                ('Random', 'random'),
                 ('Best', 'best'),
                 ('Custom', 'custom')
             ],
-            default=0 if self.model_type == 'random' else 1 if self.model_type == 'best' else 2,
+            default=0 if self.model_type == 'best' else 1,
             onchange=self._on_model_type_change,
             align=ALIGN_RIGHT,
             font_size=18,
@@ -141,6 +142,11 @@ class LoadModelScene(Scene):
         )
         self.file_selector.hide()  # Hidden unless custom model is selected
         self.button_frame.pack(self.file_selector)
+
+        # Start Simulation button
+        self.button_frame.pack(
+            self.menu.add.button('Start Simulation', self.start_simulation, align=ALIGN_RIGHT, font_size=18)
+        )
 
         # Back button
         self.button_frame.pack(
@@ -202,7 +208,7 @@ class LoadModelScene(Scene):
     def _on_model_type_change(self, _, model_type):
         """Handles model type change."""
         self.model_type = model_type
-        self.scene_manager.settings['load_model']['random_model'] = (model_type == 'random')
+        self.scene_manager.settings['load_model']['random_model'] = False
         if model_type == 'custom':
             self.file_selector.update_items(self.model_loader.get_model_files())
             self.file_selector.show()
@@ -218,7 +224,7 @@ class LoadModelScene(Scene):
         if model_paths and model_paths['actor'] and model_paths['critic']:
             self.model_path = model_paths
             self.model_type = 'custom'
-            self.model_selector.set_value(2)
+            self.model_selector.set_value(1)
             self.error_label.set_title('')
         else:
             self.model_path = None
@@ -241,6 +247,11 @@ class LoadModelScene(Scene):
         except Exception as e:
             logging.error(f"Error updating UI: {str(e)}")
             self.error_label.set_title(f"UI Error: {str(e)}")
+
+    def start_simulation(self):
+        """Start simulation with selected model."""
+        self.scene_manager.settings['load_model']['random_model'] = False
+        self.scene_manager.set_scene(SimulationScene(self.screen, self.scene_manager))
 
     def switch_to_main(self):
         """Return to main menu."""
@@ -401,8 +412,7 @@ class SimulationScene(Scene):
             self.state = next_state
             self.episode_reward += reward
             self.step += 1
-
-            if client_settings['rendering_enabled']:
+            if self.settings['rewards_enabled'] == False:
                 self.clock.tick(FPS)
 
             if losses:
@@ -506,8 +516,9 @@ class SceneManager:
                 self.current_scene.handle_event(event)
             self.current_scene.update()
             self.current_scene.draw()
-            clock.tick(FPS)
-            await asyncio.sleep(1.0 / FPS)
+            if self.settings['rewards_enabled'] == False:
+                clock.tick(FPS)
+                await asyncio.sleep(1.0 / FPS)
         writer.close()
         pygame.quit()
 

@@ -91,6 +91,10 @@ class RenderableEnvironment(Environment):
         self.agent.render_component.draw(self.screen, self.agent.pos, self.agent.radius, self.scale)
         self.draw_dish()
         self.reward.draw(self.screen, self.scale)
+
+        # Отрисовка данных состояния (вход модели)
+        self.draw_state()
+
         self.draw_logs(log_messages)
         plotter.draw_plots(self.screen)
         pygame.display.flip()
@@ -108,3 +112,55 @@ class RenderableEnvironment(Environment):
         for i, msg in enumerate(log_messages[-5:]):
             img = font.render(msg, True, colors.BLACK)
             self.screen.blit(img, (10, y + 10 + i * 25))
+
+    def draw_state(self):
+        """Отрисовка данных состояния агента (вход модели)."""
+        y = int(10 * self.scale + 7 * 20 * self.scale + 10)  # Отступ после наград (7 строк наград + 10 пикселей)
+        state = self.agent.get_state()
+        visible_food = self.settings['organism']['visible_food']
+        visible_obstacle = self.settings['organism']['visible_obstacle']
+        
+        state_texts = []
+        idx = 0
+        
+        # Позиция агента (2 значения)
+        state_texts.append(f"Agent Position: ({state[idx]:.2f}, {state[idx+1]:.2f})")
+        idx += 2
+        
+        # Скорость агента (2 значения)
+        state_texts.append(f"Agent Velocity: ({state[idx]:.2f}, {state[idx+1]:.2f})")
+        idx += 2
+        
+        # Энергия агента (1 значение)
+        state_texts.append(f"Agent Energy: {state[idx]:.2f}")
+        idx += 1
+        
+        # Расстояние до центра (1 значение)
+        state_texts.append(f"Distance to Center: {state[idx]:.2f}")
+        idx += 1
+        
+        # Направление движения (1 значение)
+        state_texts.append(f"Direction: {state[idx]:.2f}")
+        idx += 1
+        
+        # Предыдущее действие (2 значения)
+        state_texts.append(f"Previous Action: ({state[idx]:.2f}, {state[idx+1]:.2f})")
+        idx += 2
+        
+        # Данные о еде (visible_food * 4 значения: позиция x, y, скорость x, y)
+        for i in range(visible_food):
+            pos_x, pos_y, vel_x, vel_y = state[idx:idx+4]
+            state_texts.append(f"Food {i+1}: (Pos: {pos_x:.2f}, {pos_y:.2f}, Vel: {vel_x:.2f}, {vel_y:.2f})")
+            idx += 4
+        
+        # Данные о препятствиях (visible_obstacle * 4 значения: позиция x, y, скорость x, y)
+        for i in range(visible_obstacle):
+            pos_x, pos_y, vel_x, vel_y = state[idx:idx+4]
+            state_texts.append(f"Obstacle {i+1}: (Pos: {pos_x:.2f}, {pos_y:.2f}, Vel: {vel_x:.2f}, {vel_y:.2f})")
+            idx += 4
+        
+        # Отрисовка текста состояния
+        for i, text in enumerate(state_texts):
+            img = font.render(text, True, colors.BLACK)
+            scaled_img = pygame.transform.scale(img, (int(img.get_width() * self.scale), int(img.get_height() * self.scale)))
+            self.screen.blit(scaled_img, (int(10 * self.scale), y + int(i * 20 * self.scale)))

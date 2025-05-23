@@ -49,6 +49,8 @@ class Organism(GameObject):
     def __init__(self, env, settings):
         super().__init__(env, settings, 'organism')
         self.energy = settings['organism']['initial_energy']
+        self.visible_obstacle = settings['organism']['visible_obstacle']
+        self.visible_food = settings['organism']['visible_food']
         self.food_eaten = 0
         self.max_speed = settings['organism']['max_speed']
         self.prev_action = np.array([0.0, 0.0])
@@ -153,14 +155,14 @@ class Organism(GameObject):
         rel_pos = (self.pos - self.env.dish_center) / self.env.dish_radius
         state.extend(rel_pos)
         state.extend(self.vel / self.max_speed)
-        state.append(self.energy / self.settings['organism']['initial_energy'])
+        state.append(self.energy / self.settings['organism']['max_energy'])
         state.append(np.linalg.norm(self.pos - self.env.dish_center) / self.env.dish_radius)
         direction = np.arctan2(self.vel[1], self.vel[0]) / np.pi if np.linalg.norm(self.vel) > 0 else 0
         state.append(direction)
         state.extend(self.prev_action)
 
         foods = sorted(self.env.foods, key=lambda f: np.linalg.norm(self.pos - f.pos))
-        for i in range(5):
+        for i in range(self.visible_food):
             if i < len(foods):
                 rel_food_pos = (foods[i].pos - self.pos) / self.env.dish_radius
                 state.extend(rel_food_pos)
@@ -169,7 +171,7 @@ class Organism(GameObject):
                 state.extend([0, 0, 0, 0])
 
         obstacles = sorted(self.env.obstacles, key=lambda o: np.linalg.norm(self.pos - o.pos))
-        for i in range(5):
+        for i in range(self.visible_obstacle):
             if i < len(obstacles):
                 rel_obstacle_pos = (obstacles[i].pos - self.env.dish_center) / self.env.dish_radius
                 state.extend(rel_obstacle_pos)
@@ -266,7 +268,7 @@ class Environment:
     def _get_quantity(self, entity):
         settings = self.settings[entity]
         if self.settings['rewards_enabled'] and self.settings.get('increment_' + entity):
-            return settings['min_quantity'] + (self.episode // self.settings['increment_episodes']) * settings['increment_quantity']
+            return settings['start_quantity'] + (self.episode // self.settings['increment_episodes']) * settings['increment_quantity']
         return settings['quantity']
 
     def step(self, action):

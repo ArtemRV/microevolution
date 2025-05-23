@@ -11,7 +11,7 @@ from common.utils import logging
 from client.model_loader import ModelLoader
 
 class OUNoise:
-    def __init__(self, action_dim, mu=0.0, theta=0.15, sigma=0.1, decay=0.995):
+    def __init__(self, action_dim, sigma, decay, mu=0.0, theta=0.15):
         self.action_dim = action_dim
         self.mu = mu
         self.theta = theta
@@ -47,7 +47,7 @@ class DDPGAgent:
         self.batch_size = settings['batch_size']
         self.gamma = settings['gamma']
         self.tau = settings['tau']
-        self.noise = OUNoise(action_dim, sigma=0.1, decay=0.995)
+        self.noise = OUNoise(action_dim, sigma=0.1, decay=0.99)
         self.settings = settings
         self.best_test_reward = float('-inf')
         self.best_model_info = {}

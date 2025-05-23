@@ -4,18 +4,21 @@ default_settings = {
         'radius': 10,
         'max_speed': 5,
         'initial_energy': 100,
+        'max_energy': 1000,
         'max_acceleration': 1,
         'energy_per_food': 20,
         'energy_per_step': 0.05,
         'enabled': True,
         'random_start': True,
         'start_radius': 230,
+        'visible_obstacle': 0, # Quantity of obstacle params that will get to model input
+        'visible_food': 3, # Quantity of food params that will get to model input
     },
     'food': {
         'radius': 5,
         'spawn_rate': 0.1,
-        'quantity': 20,
-        'min_quantity': 10,
+        'quantity': 30,
+        'start_quantity': 20,
         'increment_quantity': 0,
         'enabled': True
     },
@@ -23,7 +26,7 @@ default_settings = {
         'radius': 15,
         'max_speed': 2,
         'quantity': 5,
-        'min_quantity': 3,
+        'start_quantity': 3,
         'increment_quantity': 0,
         'enabled': True
     },
@@ -39,7 +42,7 @@ default_settings = {
             "enabled": True
         },
         "dish_collision": {
-            "value": -100.0,
+            "value": -25.0,
             "enabled": True,
             "end_episode": True
         },
@@ -49,19 +52,19 @@ default_settings = {
             "end_episode": False
         },
         "energy": {
-            "value": -1,
-            'increment_steps': 20,
-            'increment': 0.5,
+            "value": 0,
+            'increment_steps': 25,
+            'increment': 0.1,
             "enabled": True
         },
         "approach": {
-            "value": 5,
+            "value": 1,
             "enabled": True
         },
         "survival": {
-            "value": 0.5,
-            'increment_steps': 50,
-            'increment': 0.5,
+            "value": 0,
+            'increment_steps': 499,
+            'increment': 50,
             "enabled": True
         }
     },
@@ -70,9 +73,9 @@ default_settings = {
 training_settings = {
     'episodes': 3000,
     'episode_length': 500,
-    'actor_lr': 5e-4,
+    'actor_lr': 1e-4,
     'critic_lr': 1e-3,
-    'gamma': 0.99,
+    'gamma': 0.9,
     'tau': 0.001, #0.005, # Target network update speed
     'batch_size': 128,
     'memory_size': 100000,
@@ -108,7 +111,7 @@ client_settings = {
 
 server_settings = {
     **default_settings,
-    'rewards_enabled': False,
+    'rewards_enabled': True,
     'rendering_enabled': True,
     'output_dir': 'output',
     'general': {
