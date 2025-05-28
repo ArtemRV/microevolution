@@ -1,5 +1,6 @@
 import numpy as np
 from common.utils import is_position_free
+from common.physics_processor import PhysicsProcessor
 
 class GameObject:
     """Базовый класс для игровых объектов."""
@@ -33,17 +34,6 @@ class GameObject:
             "Possible reasons: too many objects, dish radius too small, or object radius too large."
         )
 
-    def move(self):
-        """Update position based on velocity and handle dish boundary collisions."""
-        self.pos += self.vel
-        dist_to_center = np.linalg.norm(self.pos - self.env.dish_center)
-        if dist_to_center > self.env.dish_radius - self.radius:
-            normal = (self.env.dish_center - self.pos) / (dist_to_center + 1e-6)
-            dot_product = np.dot(self.vel, normal)
-            self.vel = self.vel - 2 * dot_product * normal
-            direction = (self.pos - self.env.dish_center) / (dist_to_center + 1e-6)
-            self.pos = self.env.dish_center + direction * (self.env.dish_radius - self.radius)
-
 class Organism(GameObject):
     """Класс для организма."""
     def __init__(self, env, settings):
@@ -69,13 +59,11 @@ class Organism(GameObject):
         self.step_count = 0  # Сбрасываем счетчик шагов при сбросе
 
     def move(self, action, foods, obstacles):
-        acceleration = np.array(action) * self.settings['organism']['max_acceleration']
-        self.vel += acceleration
-        speed = np.linalg.norm(self.vel)
-        if speed > self.max_speed and speed > 0:
-            self.vel = self.vel / speed * self.max_speed
+        # Process action and generic movement using PhysicsProcessor
+        self.env.physics_processor.process_organism_action(self, action)
+        self.env.physics_processor.process_generic_movement(self)
+
         prev_pos = self.pos.copy()
-        self.pos += self.vel
         self.prev_action = action
         self.step_count += 1  # Увеличиваем счетчик шагов
 
