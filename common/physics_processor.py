@@ -65,3 +65,31 @@ class PhysicsProcessor:
                     direction = (food.pos - obstacle.pos) / (dist + 1e-6) # Epsilon for safety
                     overlap = food.radius + obstacle.radius - dist
                     food.pos += direction * overlap
+
+    def resolve_generic_object_collision(self, obj1, obj2):
+        dist = np.linalg.norm(obj1.pos - obj2.pos)
+        total_radii = obj1.radius + obj2.radius
+        overlap = total_radii - dist
+
+        if overlap > 1e-6:
+            direction = obj1.pos - obj2.pos
+            
+            # Handle cases where objects are at the same position or very close
+            if np.linalg.norm(direction) < 1e-6:
+                direction = np.array([1.0, 0.0]) # Arbitrary direction for separation
+            else:
+                direction = direction / np.linalg.norm(direction) # Normalize
+
+            # Ensure total_radii is not zero to prevent division by zero error.
+            # This should generally be true if radii are positive.
+            if total_radii > 1e-6: # Added safety for total_radii
+                displacement1 = overlap * (obj2.radius / total_radii)
+                displacement2 = overlap * (obj1.radius / total_radii)
+            else:
+                # If total_radii is effectively zero, split overlap equally or handle as an error.
+                # For now, splitting equally if this unlikely case occurs.
+                displacement1 = overlap / 2
+                displacement2 = overlap / 2
+
+            obj1.pos = obj1.pos + direction * displacement1
+            obj2.pos = obj2.pos - direction * displacement2

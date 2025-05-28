@@ -345,6 +345,89 @@ class TestPhysicsProcessor(unittest.TestCase):
         np.testing.assert_array_almost_equal(food.pos, expected_food_pos, decimal=5)
         np.testing.assert_array_almost_equal(obstacle.pos, initial_obstacle_pos, decimal=5)
 
+    # Tests for resolve_generic_object_collision
+    def test_resolve_generic_object_collision_no_collision(self):
+        obj1 = self._create_test_collision_object(pos=[0.0, 0.0], radius=5.0)
+        obj2 = self._create_test_collision_object(pos=[20.0, 0.0], radius=5.0)
+        
+        initial_pos1 = obj1.pos.copy()
+        initial_pos2 = obj2.pos.copy()
+
+        self.physics_processor.resolve_generic_object_collision(obj1, obj2)
+
+        np.testing.assert_array_almost_equal(obj1.pos, initial_pos1, decimal=5)
+        np.testing.assert_array_almost_equal(obj2.pos, initial_pos2, decimal=5)
+
+    def test_resolve_generic_object_collision_same_size_objects(self):
+        # obj1 at [50, 50] (radius 5), obj2 at [55, 50] (radius 5). Overlap = 5.
+        obj1 = self._create_test_collision_object(pos=[50.0, 50.0], radius=5.0)
+        obj2 = self._create_test_collision_object(pos=[55.0, 50.0], radius=5.0)
+        
+        # displacement_obj1 = 5 * (5 / 10) = 2.5
+        # displacement_obj2 = 5 * (5 / 10) = 2.5
+        # Direction = obj1.pos - obj2.pos = [-5,0], normalized = [-1,0]
+        # Expected obj1.pos = [50,50] + [-1,0]*2.5 = [47.5, 50]
+        # Expected obj2.pos = [55,50] - [-1,0]*2.5 = [57.5, 50]
+        expected_pos1 = [47.5, 50.0]
+        expected_pos2 = [57.5, 50.0]
+
+        self.physics_processor.resolve_generic_object_collision(obj1, obj2)
+
+        np.testing.assert_array_almost_equal(obj1.pos, expected_pos1, decimal=5)
+        np.testing.assert_array_almost_equal(obj2.pos, expected_pos2, decimal=5)
+
+    def test_resolve_generic_object_collision_small_and_large_objects(self):
+        # obj1 (small, r=2) at [50, 50], obj2 (large, r=8) at [58, 50]. Overlap = 2.
+        obj1 = self._create_test_collision_object(pos=[50.0, 50.0], radius=2.0)
+        obj2 = self._create_test_collision_object(pos=[58.0, 50.0], radius=8.0)
+
+        # displacement_obj1 = 2 * (8 / 10) = 1.6
+        # displacement_obj2 = 2 * (2 / 10) = 0.4
+        # Direction = obj1.pos - obj2.pos = [-8,0], normalized = [-1,0]
+        # Expected obj1.pos = [50,50] + [-1,0]*1.6 = [48.4, 50]
+        # Expected obj2.pos = [58,50] - [-1,0]*0.4 = [58.4, 50]
+        expected_pos1 = [48.4, 50.0]
+        expected_pos2 = [58.4, 50.0]
+
+        self.physics_processor.resolve_generic_object_collision(obj1, obj2)
+
+        np.testing.assert_array_almost_equal(obj1.pos, expected_pos1, decimal=5)
+        np.testing.assert_array_almost_equal(obj2.pos, expected_pos2, decimal=5)
+
+    def test_resolve_generic_object_collision_perfectly_overlapping_centers(self):
+        # obj1 (r=5) and obj2 (r=3) both at [50, 50]. Overlap = 8.
+        obj1 = self._create_test_collision_object(pos=[50.0, 50.0], radius=5.0)
+        obj2 = self._create_test_collision_object(pos=[50.0, 50.0], radius=3.0)
+        
+        # displacement_obj1 = 8 * (3 / 8) = 3
+        # displacement_obj2 = 8 * (5 / 8) = 5
+        # Direction defaults to [1,0]
+        # Expected obj1.pos = [50,50] + [1,0]*3 = [53, 50]
+        # Expected obj2.pos = [50,50] - [1,0]*5 = [45, 50]
+        expected_pos1 = [53.0, 50.0]
+        expected_pos2 = [45.0, 50.0]
+
+        self.physics_processor.resolve_generic_object_collision(obj1, obj2)
+
+        np.testing.assert_array_almost_equal(obj1.pos, expected_pos1, decimal=5)
+        np.testing.assert_array_almost_equal(obj2.pos, expected_pos2, decimal=5)
+
+    def test_resolve_generic_object_collision_touching_no_overlap(self):
+        # obj1 (r=5) at [50,50], obj2 (r=5) at [60,50]. Overlap = 0.
+        obj1 = self._create_test_collision_object(pos=[50.0, 50.0], radius=5.0)
+        obj2 = self._create_test_collision_object(pos=[60.0, 50.0], radius=5.0)
+
+        initial_pos1 = obj1.pos.copy()
+        initial_pos2 = obj2.pos.copy()
+
+        self.physics_processor.resolve_generic_object_collision(obj1, obj2)
+
+        # Overlap is 0, so if overlap > 1e-6 is false, no change.
+        # If overlap is positive but very small (e.g. 1e-7 due to float precision),
+        # then a tiny change might happen. The test assumes overlap <= 1e-6 means no change.
+        np.testing.assert_array_almost_equal(obj1.pos, initial_pos1, decimal=5)
+        np.testing.assert_array_almost_equal(obj2.pos, initial_pos2, decimal=5)
+
 
 if __name__ == '__main__':
     unittest.main()

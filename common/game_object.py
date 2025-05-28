@@ -271,6 +271,22 @@ class Environment:
         # Food movement
         for food in self.foods:
             self.physics_processor.process_generic_movement(food)
+
+        # --- NEW COLLISION LOGIC STARTS HERE ---
+        # Agent vs. Obstacles
+        for obstacle in self.obstacles:
+            # Check if agent and obstacle are not None and have necessary attributes
+            if self.agent and obstacle and hasattr(self.agent, 'pos') and hasattr(obstacle, 'pos'):
+                 self.physics_processor.resolve_generic_object_collision(self.agent, obstacle)
+
+        # Obstacle vs. Obstacle
+        for i, obs1 in enumerate(self.obstacles):
+            for j in range(i + 1, len(self.obstacles)):
+                obs2 = self.obstacles[j]
+                # Check if obs1 and obs2 are not None and have necessary attributes
+                if obs1 and obs2 and hasattr(obs1, 'pos') and hasattr(obs2, 'pos'):
+                    self.physics_processor.resolve_generic_object_collision(obs1, obs2)
+        # --- NEW COLLISION LOGIC ENDS HERE ---
         
         self.update_grid()
         next_state = self.agent.get_state()
