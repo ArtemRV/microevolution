@@ -1,5 +1,6 @@
 import numpy as np
 from common.utils import is_position_free
+from common.physics_processor import PhysicsProcessor
 
 class GameObject:
     """Базовый класс для игровых объектов."""
@@ -33,17 +34,6 @@ class GameObject:
             "Possible reasons: too many objects, dish radius too small, or object radius too large."
         )
 
-    def move(self):
-        """Update position based on velocity and handle dish boundary collisions."""
-        self.pos += self.vel
-        dist_to_center = np.linalg.norm(self.pos - self.env.dish_center)
-        if dist_to_center > self.env.dish_radius - self.radius:
-            normal = (self.env.dish_center - self.pos) / (dist_to_center + 1e-6)
-            dot_product = np.dot(self.vel, normal)
-            self.vel = self.vel - 2 * dot_product * normal
-            direction = (self.pos - self.env.dish_center) / (dist_to_center + 1e-6)
-            self.pos = self.env.dish_center + direction * (self.env.dish_radius - self.radius)
-
 class Organism(GameObject):
     """Класс для организма."""
     def __init__(self, env, settings):
@@ -69,13 +59,11 @@ class Organism(GameObject):
         self.step_count = 0  # Сбрасываем счетчик шагов при сбросе
 
     def move(self, action, foods, obstacles):
-        acceleration = np.array(action) * self.settings['organism']['max_acceleration']
-        self.vel += acceleration
-        speed = np.linalg.norm(self.vel)
-        if speed > self.max_speed and speed > 0:
-            self.vel = self.vel / speed * self.max_speed
+        # Process action and generic movement using PhysicsProcessor
+        self.env.physics_processor.process_organism_action(self, action)
+        self.env.physics_processor.process_generic_movement(self)
+
         prev_pos = self.pos.copy()
-        self.pos += self.vel
         self.prev_action = action
         self.step_count += 1  # Увеличиваем счетчик шагов
 
@@ -186,17 +174,11 @@ class Food(GameObject):
     def __init__(self, env, settings, existing_objects):
         super().__init__(env, settings, 'food', existing_objects)
 
-    def move(self):
-        super().move()
-
 class Obstacle(GameObject):
     """Obstacle class."""
     def __init__(self, env, settings, existing_objects):
         super().__init__(env, settings, 'obstacle', existing_objects)
         self.vel = np.random.uniform(-settings['obstacle']['max_speed'], settings['obstacle']['max_speed'], 2)
-
-    def move(self):
-        super().move()
 
 class Environment:
     """Базовая игровая среда."""
@@ -221,6 +203,7 @@ class Environment:
         self.agent = self.organism_class(self, settings)
         self.grid_size = settings['general']['grid_size']
         self.grid = Grid(self.grid_size, self.width, self.height)
+        self.physics_processor = PhysicsProcessor(self, settings) # Added this line
         self.reward = Reward()
         
         self.foods = []
@@ -273,29 +256,37 @@ class Environment:
 
     def step(self, action):
         self.reward.reset()
-        done = self.agent.move(action, self.foods, self.obstacles)
-        
+        done = self.agent.move(action, self.foods, self.obstacles) # Agent movement (uses physics_processor internally)
+
+        # Obstacle movement
         for obstacle in self.obstacles:
-            obstacle.move()
-        
+            self.physics_processor.process_generic_movement(obstacle)
+
+        # Food-Obstacle collision resolution
+        self.physics_processor.resolve_food_obstacle_collisions(self.foods, self.obstacles)
+
+        # Food-Food collision resolution
+        self.physics_processor.resolve_food_food_collisions(self.foods)
+
+        # Food movement
         for food in self.foods:
-            for obstacle in self.obstacles:
-                dist = np.linalg.norm(food.pos - obstacle.pos)
-                if dist < food.radius + obstacle.radius:
-                    direction = (food.pos - obstacle.pos) / (dist + 1e-6)
-                    food.pos += direction * (food.radius + obstacle.radius - dist)
-        
-        for i, food1 in enumerate(self.foods):
-            for food2 in self.foods[i+1:]:
-                dist = np.linalg.norm(food1.pos - food2.pos)
-                if dist < food1.radius + food2.radius and dist > 0:
-                    direction = (food1.pos - food2.pos) / (dist + 1e-6)
-                    overlap = food1.radius + food2.radius - dist
-                    food1.pos += direction * (overlap / 2)
-                    food2.pos -= direction * (overlap / 2)
-        
-        for food in self.foods:
-            food.move()
+            self.physics_processor.process_generic_movement(food)
+
+        # --- NEW COLLISION LOGIC STARTS HERE ---
+        # Agent vs. Obstacles
+        for obstacle in self.obstacles:
+            # Check if agent and obstacle are not None and have necessary attributes
+            if self.agent and obstacle and hasattr(self.agent, 'pos') and hasattr(obstacle, 'pos'):
+                 self.physics_processor.resolve_generic_object_collision(self.agent, obstacle)
+
+        # Obstacle vs. Obstacle
+        for i, obs1 in enumerate(self.obstacles):
+            for j in range(i + 1, len(self.obstacles)):
+                obs2 = self.obstacles[j]
+                # Check if obs1 and obs2 are not None and have necessary attributes
+                if obs1 and obs2 and hasattr(obs1, 'pos') and hasattr(obs2, 'pos'):
+                    self.physics_processor.resolve_generic_object_collision(obs1, obs2)
+        # --- NEW COLLISION LOGIC ENDS HERE ---
         
         self.update_grid()
         next_state = self.agent.get_state()
