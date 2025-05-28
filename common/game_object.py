@@ -1,5 +1,6 @@
 import numpy as np
 from common.utils import is_position_free
+from common.physics_processor import PhysicsProcessor
 
 class GameObject:
     """Базовый класс для игровых объектов."""
@@ -7,6 +8,12 @@ class GameObject:
         self.env = env
         self.settings = settings
         self.object_type = object_type  # 'organism', 'food', or 'obstacle'
+        
+        # Default physical properties (can be overridden by subclasses)
+        self.mass = 1.0  # Default mass
+        self.elasticity = 0.5  # Default elasticity
+        self.friction_coefficient = 0.1  # Default friction
+
         self.radius = settings[object_type]['radius']
         self.pos = self._initialize_position(existing_objects)
         self.vel = np.array([0.0, 0.0])
@@ -33,21 +40,16 @@ class GameObject:
             "Possible reasons: too many objects, dish radius too small, or object radius too large."
         )
 
-    def move(self):
-        """Update position based on velocity and handle dish boundary collisions."""
-        self.pos += self.vel
-        dist_to_center = np.linalg.norm(self.pos - self.env.dish_center)
-        if dist_to_center > self.env.dish_radius - self.radius:
-            normal = (self.env.dish_center - self.pos) / (dist_to_center + 1e-6)
-            dot_product = np.dot(self.vel, normal)
-            self.vel = self.vel - 2 * dot_product * normal
-            direction = (self.pos - self.env.dish_center) / (dist_to_center + 1e-6)
-            self.pos = self.env.dish_center + direction * (self.env.dish_radius - self.radius)
-
 class Organism(GameObject):
     """Класс для организма."""
     def __init__(self, env, settings):
         super().__init__(env, settings, 'organism')
+        
+        organism_settings = settings.get('organism', {})
+        self.mass = float(organism_settings.get('mass', 1.0))
+        self.elasticity = float(organism_settings.get('elasticity', 0.5))
+        self.friction_coefficient = float(organism_settings.get('friction_coefficient', 0.1))
+        
         self.energy = settings['organism']['initial_energy']
         self.visible_obstacle = settings['organism']['visible_obstacle']
         self.visible_food = settings['organism']['visible_food']
@@ -69,15 +71,14 @@ class Organism(GameObject):
         self.step_count = 0  # Сбрасываем счетчик шагов при сбросе
 
     def move(self, action, foods, obstacles):
-        acceleration = np.array(action) * self.settings['organism']['max_acceleration']
-        self.vel += acceleration
-        speed = np.linalg.norm(self.vel)
-        if speed > self.max_speed and speed > 0:
-            self.vel = self.vel / speed * self.max_speed
-        prev_pos = self.pos.copy()
-        self.pos += self.vel
+        # prev_pos is based on the position after global updates and collision resolutions
+        prev_pos = self.pos.copy() 
+        
+        # Record the action taken for state representation or other logic
         self.prev_action = action
         self.step_count += 1  # Увеличиваем счетчик шагов
+
+        # Velocity and position updates are now handled by PhysicsProcessor in Environment.step
 
         if not self.settings['rewards_enabled']:
             return False
@@ -185,18 +186,23 @@ class Food(GameObject):
     """Food class."""
     def __init__(self, env, settings, existing_objects):
         super().__init__(env, settings, 'food', existing_objects)
-
-    def move(self):
-        super().move()
+        
+        food_settings = settings.get('food', {})
+        self.mass = float(food_settings.get('mass', 0.2))
+        self.elasticity = float(food_settings.get('elasticity', 0.3))
+        self.friction_coefficient = float(food_settings.get('friction_coefficient', 0.8))
 
 class Obstacle(GameObject):
     """Obstacle class."""
     def __init__(self, env, settings, existing_objects):
         super().__init__(env, settings, 'obstacle', existing_objects)
+        
+        obstacle_settings = settings.get('obstacle', {})
+        self.mass = float(obstacle_settings.get('mass', 10.0))
+        self.elasticity = float(obstacle_settings.get('elasticity', 0.7))
+        self.friction_coefficient = float(obstacle_settings.get('friction_coefficient', 0.05))
+        
         self.vel = np.random.uniform(-settings['obstacle']['max_speed'], settings['obstacle']['max_speed'], 2)
-
-    def move(self):
-        super().move()
 
 class Environment:
     """Базовая игровая среда."""
@@ -221,6 +227,7 @@ class Environment:
         self.agent = self.organism_class(self, settings)
         self.grid_size = settings['general']['grid_size']
         self.grid = Grid(self.grid_size, self.width, self.height)
+        self.physics_processor = PhysicsProcessor(self, settings) # Added this line
         self.reward = Reward()
         
         self.foods = []
@@ -273,34 +280,88 @@ class Environment:
 
     def step(self, action):
         self.reward.reset()
-        done = self.agent.move(action, self.foods, self.obstacles)
-        
+
+        # 1. AGENT ACTION PROCESSING (Update Agent's Intended Velocity)
+        # This assumes Organism.move will be refactored. For now, this call primarily sets agent's velocity based on action.
+        self.physics_processor.process_organism_action(self.agent, action) # Sets self.agent.vel based on action.
+
+        # 2. GLOBAL POSITION UPDATE (All objects move based on current velocity)
+        all_movable_objects = [self.agent] + self.obstacles + self.foods
+        for obj in all_movable_objects:
+            if obj and hasattr(obj, 'vel') and hasattr(obj, 'pos'): # Ensure object is valid and has physics properties
+                obj.pos += obj.vel * self.DELTA_TIME
+
+        # 3. COLLISION RESOLUTION & BOUNDARY HANDLING
+        # 3a. Handle Dish Boundaries for all objects
+        for obj in all_movable_objects:
+            if obj and hasattr(obj, 'vel') and hasattr(obj, 'pos'): # Ensure object is valid and has physics properties
+                # Ensure radius and env attributes exist for boundary handling
+                if hasattr(obj, 'radius') and hasattr(obj, 'env'):
+                    self.physics_processor.handle_dish_boundary(obj) # Placeholder, will be implemented in Step 7
+
+        # 3b. Resolve Inter-Object Collisions
+        # Organism vs. Obstacles (Positional correction only for both)
         for obstacle in self.obstacles:
-            obstacle.move()
+            if self.agent and obstacle and hasattr(self.agent, 'pos') and hasattr(obstacle, 'pos'): # Basic check
+                self.physics_processor.resolve_organism_positional_collision(self.agent, obstacle)
         
-        for food in self.foods:
-            for obstacle in self.obstacles:
-                dist = np.linalg.norm(food.pos - obstacle.pos)
-                if dist < food.radius + obstacle.radius:
-                    direction = (food.pos - obstacle.pos) / (dist + 1e-6)
-                    food.pos += direction * (food.radius + obstacle.radius - dist)
-        
+        # Organism vs. Organism (Positional correction only for both) - if multiple agents
+        # Example: (assuming self.agents is a list of agents)
+        # for i, agent1 in enumerate(self.agents):
+        #     for j in range(i + 1, len(self.agents)):
+        #         agent2 = self.agents[j]
+        #         if agent1 and agent2:
+        #             self.physics_processor.resolve_organism_positional_collision(agent1, agent2)
+
+
+        # Obstacle vs. Obstacle (Billiard ball physics)
+        for i, obs1 in enumerate(self.obstacles):
+            for j in range(i + 1, len(self.obstacles)):
+                obs2 = self.obstacles[j]
+                if obs1 and obs2 and hasattr(obs1, 'pos') and hasattr(obs2, 'pos'):
+                    self.physics_processor.resolve_billiard_ball_collision(obs1, obs2)
+
+        # Obstacle vs. Food (Billiard ball, obstacle velocity unchanged)
+        # Iterate over a copy of self.foods list if food items can be removed by eating before this loop
+        # However, eating logic is planned after this collision block in this version.
+        for obstacle in self.obstacles:
+            for food_item in self.foods: # self.foods might change if eating happens before this
+                if obstacle and food_item and hasattr(obstacle, 'pos') and hasattr(food_item, 'pos'):
+                    self.physics_processor.resolve_billiard_ball_collision(obstacle, food_item, is_obstacle_food_pair=True)
+
+        # Food vs. Food (Billiard ball physics)
         for i, food1 in enumerate(self.foods):
-            for food2 in self.foods[i+1:]:
-                dist = np.linalg.norm(food1.pos - food2.pos)
-                if dist < food1.radius + food2.radius and dist > 0:
-                    direction = (food1.pos - food2.pos) / (dist + 1e-6)
-                    overlap = food1.radius + food2.radius - dist
-                    food1.pos += direction * (overlap / 2)
-                    food2.pos -= direction * (overlap / 2)
+            for j in range(i + 1, len(self.foods)): # Ensure unique pairs
+                food2 = self.foods[j]
+                if food1 and food2 and hasattr(food1, 'pos') and hasattr(food2, 'pos'):
+                    self.physics_processor.resolve_billiard_ball_collision(food1, food2)
         
-        for food in self.foods:
-            food.move()
-        
-        self.update_grid()
+        # (Optional: A second pass of boundary checks after collisions if objects might be pushed out)
+        # for obj in all_movable_objects:
+        #    if obj and hasattr(obj, 'vel') and hasattr(obj, 'pos'):
+        #        self.physics_processor.handle_dish_boundary(obj)
+
+
+        # 4. FOOD EATING, REWARDS, AND 'DONE' STATUS FROM ORGANISM
+        # The 'action' passed here is the original action for the step.
+        # Organism.move will use its current state (pos, vel, etc.) and this action
+        # to determine rewards, eating, energy, and done status.
+        # The direct effect of 'action' on velocity was already handled in step 1.
+        # This call needs to be aware that 'self.agent.pos' might have been updated by collisions.
+        done = self.agent.move(action, self.foods, self.obstacles)
+
+        # 5. APPLY SURFACE FRICTION (Primarily for food)
+        # Iterate over self.foods which might have changed if eating occurred in self.agent.move()
+        for food_item in list(self.foods): # Iterate over a copy in case food_item is removed by some other process
+            if food_item and hasattr(food_item, 'vel') and hasattr(food_item, 'friction_coefficient'): 
+                self.physics_processor.apply_surface_friction(food_item, self.DELTA_TIME)
+
+        # 6. UPDATE GRID, GET STATE, REWARD ACCUMULATION
+        self.update_grid() # Update grid with final positions
         next_state = self.agent.get_state()
-        reward = self.reward.get()
-        return next_state, reward, done
+        current_reward = self.reward.get() # Get all rewards accumulated during this step
+
+        return next_state, current_reward, done
 
     def get_render_data(self):
         return {
