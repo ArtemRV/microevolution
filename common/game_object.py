@@ -174,17 +174,11 @@ class Food(GameObject):
     def __init__(self, env, settings, existing_objects):
         super().__init__(env, settings, 'food', existing_objects)
 
-    def move(self):
-        super().move()
-
 class Obstacle(GameObject):
     """Obstacle class."""
     def __init__(self, env, settings, existing_objects):
         super().__init__(env, settings, 'obstacle', existing_objects)
         self.vel = np.random.uniform(-settings['obstacle']['max_speed'], settings['obstacle']['max_speed'], 2)
-
-    def move(self):
-        super().move()
 
 class Environment:
     """Базовая игровая среда."""
@@ -209,6 +203,7 @@ class Environment:
         self.agent = self.organism_class(self, settings)
         self.grid_size = settings['general']['grid_size']
         self.grid = Grid(self.grid_size, self.width, self.height)
+        self.physics_processor = PhysicsProcessor(self, settings) # Added this line
         self.reward = Reward()
         
         self.foods = []
@@ -261,29 +256,21 @@ class Environment:
 
     def step(self, action):
         self.reward.reset()
-        done = self.agent.move(action, self.foods, self.obstacles)
-        
+        done = self.agent.move(action, self.foods, self.obstacles) # Agent movement (uses physics_processor internally)
+
+        # Obstacle movement
         for obstacle in self.obstacles:
-            obstacle.move()
-        
+            self.physics_processor.process_generic_movement(obstacle)
+
+        # Food-Obstacle collision resolution
+        self.physics_processor.resolve_food_obstacle_collisions(self.foods, self.obstacles)
+
+        # Food-Food collision resolution
+        self.physics_processor.resolve_food_food_collisions(self.foods)
+
+        # Food movement
         for food in self.foods:
-            for obstacle in self.obstacles:
-                dist = np.linalg.norm(food.pos - obstacle.pos)
-                if dist < food.radius + obstacle.radius:
-                    direction = (food.pos - obstacle.pos) / (dist + 1e-6)
-                    food.pos += direction * (food.radius + obstacle.radius - dist)
-        
-        for i, food1 in enumerate(self.foods):
-            for food2 in self.foods[i+1:]:
-                dist = np.linalg.norm(food1.pos - food2.pos)
-                if dist < food1.radius + food2.radius and dist > 0:
-                    direction = (food1.pos - food2.pos) / (dist + 1e-6)
-                    overlap = food1.radius + food2.radius - dist
-                    food1.pos += direction * (overlap / 2)
-                    food2.pos -= direction * (overlap / 2)
-        
-        for food in self.foods:
-            food.move()
+            self.physics_processor.process_generic_movement(food)
         
         self.update_grid()
         next_state = self.agent.get_state()
