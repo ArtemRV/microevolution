@@ -57,6 +57,9 @@ class RenderableEnvironment(Environment):
         self.scale = 1.0
         self.dish_center = (self.width // 2, 10 + settings['general']['dish_radius'])
 
+        # ADD THIS LINE:
+        self.DELTA_TIME = self.settings.get('general', {}).get('delta_time', 1/60.0)
+
         # Добавляем компоненты рендеринга
         self.agent.render_component = RenderComponent(colors.BLUE)
         for food in self.foods:
