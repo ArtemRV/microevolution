@@ -73,7 +73,7 @@ class PhysicsProcessor:
 
         if overlap > 1e-6:
             direction = obj1.pos - obj2.pos
-            
+
             # Handle cases where objects are at the same position or very close
             if np.linalg.norm(direction) < 1e-6:
                 direction = np.array([1.0, 0.0]) # Arbitrary direction for separation
@@ -93,3 +93,162 @@ class PhysicsProcessor:
 
             obj1.pos = obj1.pos + direction * displacement1
             obj2.pos = obj2.pos - direction * displacement2
+
+    def apply_surface_friction(self, obj, delta_time):
+        # Retrieve gravitational constant g from settings, with a default value
+        physics_constants = self.settings.get('physics_constants', {})
+        g = physics_constants.get('g', 9.8)
+
+        speed = np.linalg.norm(obj.vel)
+
+        # If the object is practically stationary, do nothing
+        if speed < 1e-6:
+            return
+
+        # Calculate deceleration due to friction
+        # Assumes obj has a 'friction_coefficient' attribute
+        deceleration = obj.friction_coefficient * g
+
+        # Calculate the potential change in speed in this time step
+        delta_speed = deceleration * delta_time
+
+        # If friction would stop the object or reverse its velocity
+        if delta_speed >= speed:
+            obj.vel = np.array([0.0, 0.0])
+        else:
+            # Friction slows the object but doesn't stop it
+            new_speed = speed - delta_speed
+            obj.vel = (obj.vel / speed) * new_speed # Maintain direction, reduce magnitude
+
+    def resolve_billiard_ball_collision(self, obj1, obj2, is_obstacle_food_pair=False):
+        # Part 1: Positional Correction (Prevent Overlap)
+        initial_dist = np.linalg.norm(obj1.pos - obj2.pos)
+        total_radii = obj1.radius + obj2.radius
+        overlap = total_radii - initial_dist
+
+        original_obj1_vel = obj1.vel.copy() # Store original velocity for obstacle in obstacle-food pair
+
+        if overlap > 1e-6:
+            direction = obj1.pos - obj2.pos
+            norm_direction = np.linalg.norm(direction)
+
+            if norm_direction < 1e-6:
+                direction_normalized = np.array([1.0, 0.0]) # Arbitrary direction for separation
+            else:
+                direction_normalized = direction / norm_direction
+
+            m1 = obj1.mass
+            m2 = obj2.mass
+            total_mass = m1 + m2
+
+            if total_mass < 1e-6: # Effectively massless pair
+                displacement1 = overlap / 2.0
+                displacement2 = overlap / 2.0
+            else:
+                displacement1 = overlap * (m2 / total_mass)
+                displacement2 = overlap * (m1 / total_mass)
+
+            obj1.pos = obj1.pos + direction_normalized * displacement1
+            obj2.pos = obj2.pos - direction_normalized * displacement2
+
+            # Part 2: Velocity Update (Elastic Collision)
+            # Normal vector based on corrected positions (or direction_normalized can be used)
+            # If objects were perfectly overlapping and then separated, direction_normalized is the normal.
+            # If they were already separated, direction_normalized is still the line between centers.
+            normal_vec = direction_normalized # This is already normalized and points from obj2 to obj1
+
+            # Tangent vector
+            tangent_vec = np.array([-normal_vec[1], normal_vec[0]])
+
+            # Project velocities onto normal and tangent vectors
+            v1n = np.dot(obj1.vel, normal_vec)
+            v1t = np.dot(obj1.vel, tangent_vec)
+            v2n = np.dot(obj2.vel, normal_vec)
+            v2t = np.dot(obj2.vel, tangent_vec)
+
+            # Calculate new normal velocities (1D elastic collision formula with restitution)
+            combined_elasticity = (obj1.elasticity + obj2.elasticity) / 2.0
+
+            if total_mass < 1e-6: # Massless pair
+                # Simplification: normal velocities are unchanged or swap if e=1
+                # For now, unchanged as per plan if total_mass is zero.
+                # If one is massive and other is not, the formula below actually handles it.
+                # This case is truly for when m1 and m2 are both near zero.
+                new_v1n_final = v1n
+                new_v2n_final = v2n
+            else:
+                new_v1n_final = (m1*v1n + m2*v2n - m2*(v1n - v2n)*combined_elasticity) / total_mass
+                new_v2n_final = (m1*v1n + m2*v2n - m1*(v2n - v1n)*combined_elasticity) / total_mass
+
+            # Convert new normal velocities back to vector form and add tangent components
+            new_v1_vec = new_v1n_final * normal_vec + v1t * tangent_vec
+            new_v2_vec = new_v2n_final * normal_vec + v2t * tangent_vec
+
+            # Apply velocities
+            if is_obstacle_food_pair:
+                # obj1 is Obstacle, obj2 is Food
+                obj1.vel = original_obj1_vel # Obstacle velocity remains unchanged
+                obj2.vel = new_v2_vec
+            else:
+                obj1.vel = new_v1_vec
+                obj2.vel = new_v2_vec
+        # else: if overlap <= 1e-6, no positional or velocity update from collision is needed.
+
+    def resolve_organism_positional_collision(self, organism, other_object):
+        dist = np.linalg.norm(organism.pos - other_object.pos)
+        total_radii = organism.radius + other_object.radius
+        overlap = total_radii - dist
+
+        if overlap > 1e-6:
+            direction = organism.pos - other_object.pos
+            norm_direction_val = np.linalg.norm(direction)
+
+            if norm_direction_val < 1e-6:
+                direction_normalized = np.array([1.0, 0.0]) # Arbitrary separation axis
+            else:
+                direction_normalized = direction / norm_direction_val
+
+            m_organism = organism.mass
+            m_other = other_object.mass
+            total_mass = m_organism + m_other
+
+            if total_mass < 1e-6: # Effectively massless pair
+                displacement_organism = overlap / 2.0
+                displacement_other = overlap / 2.0
+            else: # Standard mass-based displacement
+                displacement_organism = overlap * (m_other / total_mass)
+                displacement_other = overlap * (m_organism / total_mass)
+
+            organism.pos = organism.pos + direction_normalized * displacement_organism
+            other_object.pos = other_object.pos - direction_normalized * displacement_other
+
+        # This method explicitly does not modify velocities.
+
+    def handle_dish_boundary(self, obj):
+        dist_to_center = np.linalg.norm(obj.pos - self.env.dish_center)
+
+        # Ensure obj has a radius attribute, defaulting to 0 if not (though objects should have it)
+        obj_radius = obj.radius if hasattr(obj, 'radius') else 0.0
+
+        if dist_to_center > self.env.dish_radius - obj_radius:
+            # Normal vector of the collision (points from dish center towards the object, normalized)
+            # This vector points outwards from the dish center to the object's center.
+            # This is the normal of the surface FROM the object's perspective.
+            # For the reflection formula v_new = v - 2 * dot(v, n) * n, 'n' should be the normal of the surface hit.
+            # So, collision_normal should point from the object towards the center, or from boundary point to center.
+            # The provided example uses (obj.pos - self.env.dish_center), which is outward from center.
+            # Let's use this for consistency with the example.
+
+            collision_normal = (obj.pos - self.env.dish_center) / (dist_to_center + 1e-6)
+
+            # Reflect velocity: v_new = v - 2 * dot(v, n) * n
+            # Ensure obj.vel is a numpy array
+            if not isinstance(obj.vel, np.ndarray):
+                obj.vel = np.array(obj.vel, dtype=float)
+
+            obj.vel = obj.vel - 2 * np.dot(obj.vel, collision_normal) * collision_normal
+
+            # Correct position to be on the boundary
+            # The object should be placed exactly at (dish_radius - obj.radius) from the center
+            # along the collision_normal direction (which is already the normalized direction from center to object)
+            obj.pos = self.env.dish_center + collision_normal * (self.env.dish_radius - obj_radius)

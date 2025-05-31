@@ -53,7 +53,7 @@ class TestPhysicsProcessor(unittest.TestCase):
         }
         # Using dish_center that allows objects to be placed without immediate collision for simple tests
         self.mock_env = MockEnvironment(
-            dish_radius=self.mock_settings['general']['dish_radius'], 
+            dish_radius=self.mock_settings['general']['dish_radius'],
             dish_center=[100.0, 100.0] # Centered within a 200x200 area
         )
         # If PhysicsProcessor expects env.settings:
@@ -73,7 +73,7 @@ class TestPhysicsProcessor(unittest.TestCase):
         self.test_game_object.render_component = None
 
         # Example Organism (might be more useful to create fresh in each test)
-        # self.test_organism = Organism(self.mock_env, self.mock_settings) 
+        # self.test_organism = Organism(self.mock_env, self.mock_settings)
         # Note: Organism __init__ calls _initialize_position which might need more env setup
         # or mocking of is_position_free if used directly.
         # For unit testing PhysicsProcessor methods, we often just need objects with pos, vel, radius.
@@ -110,12 +110,12 @@ class TestPhysicsProcessor(unittest.TestCase):
         initial_pos = [100.0, 195.0 - 1.0] # y = 194.0
         initial_vel = [0.0, 2.0] # Moving straight up
         game_object = self._create_test_game_object(pos=initial_pos, vel=initial_vel, radius=obj_radius)
-        
+
         # After collision, object should be on boundary, y_vel reflected
         # Expected position y = 195.0
         # Original velocity was (0, 2). Normal approx (0, -1). Reflected vel = (0,2) - 2 * dot((0,2),(0,-1)) * (0,-1)
         # = (0,2) - 2 * (-2) * (0,-1) = (0,2) + 4 * (0,-1) = (0,2) + (0,-4) = (0,-2)
-        
+
         self.physics_processor.process_generic_movement(game_object)
 
         # Check velocity is reflected
@@ -127,7 +127,7 @@ class TestPhysicsProcessor(unittest.TestCase):
         expected_pos_y = self.mock_env.dish_center[1] + (self.mock_env.dish_radius - game_object.radius)
         self.assertAlmostEqual(game_object.pos[0], initial_pos[0], places=5) # X position shouldn't change much
         self.assertAlmostEqual(game_object.pos[1], expected_pos_y, places=5)
-        
+
         # Verify distance from center after repositioning
         dist_to_center_after = np.linalg.norm(game_object.pos - self.mock_env.dish_center)
         self.assertAlmostEqual(dist_to_center_after, self.mock_env.dish_radius - game_object.radius, places=5)
@@ -162,7 +162,7 @@ class TestPhysicsProcessor(unittest.TestCase):
         # Note: The reflection formula used v' = v - 2 * dot(v, n) * n preserves magnitude of v if n is a unit vector.
         reflected_vel_magnitude = np.linalg.norm(game_object.vel)
         self.assertAlmostEqual(reflected_vel_magnitude, original_vel_magnitude, places=5, msg="Speed should be conserved after reflection")
-        
+
         # Simple check: both components of velocity should not be positive if moving towards top-right
         self.assertTrue(not (game_object.vel[0] > 0 and game_object.vel[1] > 0), "Velocity not reflected as expected for diagonal collision")
 
@@ -172,14 +172,13 @@ class TestPhysicsProcessor(unittest.TestCase):
         org.vel = np.array(vel, dtype=float)
         org.radius = float(radius if radius is not None else self.mock_settings['organism']['radius'])
         org.max_speed = float(max_speed if max_speed is not None else self.mock_settings['organism']['max_speed'])
-        
-        # process_organism_action is called from PhysicsProcessor, 
+
+        # process_organism_action is called from PhysicsProcessor,
         # and PhysicsProcessor's self.settings is passed to it.
         # The organism object itself doesn't need its own .settings for this method to be unit-tested.
         # However, if other Organism methods were called, it might.
         # For this specific test, PhysicsProcessor.settings['organism']['max_acceleration'] is used.
-        # org.settings = self.mock_settings 
-        
+        # org.settings = self.mock_settings
         # org.env = self.mock_env # Not used by process_organism_action
         org.object_type = 'organism' # For clarity
         return org
@@ -188,12 +187,10 @@ class TestPhysicsProcessor(unittest.TestCase):
         initial_vel = [0.0, 0.0]
         organism = self._create_test_organism(pos=[0.0, 0.0], vel=initial_vel)
         action = np.array([1.0, 0.0])
-        
         max_acceleration = self.mock_settings['organism']['max_acceleration']
         expected_vel = np.array(initial_vel) + action * max_acceleration
 
         self.physics_processor.process_organism_action(organism, action)
-        
         np.testing.assert_array_almost_equal(organism.vel, expected_vel, decimal=5)
         self.assertTrue(np.linalg.norm(organism.vel) < organism.max_speed) # Ensure no clamping occurred
 
@@ -202,18 +199,18 @@ class TestPhysicsProcessor(unittest.TestCase):
         initial_vel = [1.0, 0.0] # Initial speed is 1.0
         # Organism's max_speed is set during its creation by _create_test_organism
         organism = self._create_test_organism(pos=[0.0, 0.0], vel=initial_vel, max_speed=custom_max_speed)
-        
+
         action = np.array([2.0, 0.0]) # This action will push speed beyond max_speed
         max_acceleration = self.mock_settings['organism']['max_acceleration'] # This is 1.0
-        
+
         # vel = [1,0] + [2,0]*1.0 = [3,0]. Speed = 3.0
         vel_before_clamping = np.array(initial_vel) + action * max_acceleration
-        
+
         self.physics_processor.process_organism_action(organism, action)
-        
+
         # Assert speed is clamped to max_speed
         self.assertAlmostEqual(np.linalg.norm(organism.vel), custom_max_speed, decimal=5)
-        
+
         # Assert direction is preserved
         expected_direction = vel_before_clamping / np.linalg.norm(vel_before_clamping)
         actual_direction = organism.vel / np.linalg.norm(organism.vel)
@@ -223,15 +220,15 @@ class TestPhysicsProcessor(unittest.TestCase):
         initial_vel = [1.0, 1.0]
         organism = self._create_test_organism(pos=[0.0, 0.0], vel=initial_vel)
         action = np.array([0.0, 0.0])
-        
+
         expected_vel = np.array(initial_vel) # Velocity should not change
 
         self.physics_processor.process_organism_action(organism, action)
-        
+
         np.testing.assert_array_almost_equal(organism.vel, expected_vel, decimal=5)
 
     def _create_test_collision_object(self, pos, radius):
-        obj = Mock() 
+        obj = Mock()
         obj.pos = np.array(pos, dtype=float)
         obj.radius = float(radius)
         return obj
@@ -240,7 +237,6 @@ class TestPhysicsProcessor(unittest.TestCase):
     def test_resolve_food_food_collisions_no_collision(self):
         food1 = self._create_test_collision_object(pos=[0.0, 0.0], radius=5.0)
         food2 = self._create_test_collision_object(pos=[20.0, 0.0], radius=5.0)
-        
         initial_pos1 = food1.pos.copy()
         initial_pos2 = food2.pos.copy()
 
@@ -252,7 +248,6 @@ class TestPhysicsProcessor(unittest.TestCase):
     def test_resolve_food_food_collisions_simple_overlap(self):
         food1 = self._create_test_collision_object(pos=[50.0, 50.0], radius=5.0) # Center at 50
         food2 = self._create_test_collision_object(pos=[55.0, 50.0], radius=5.0) # Center at 55, edge at 50. Overlap is 5.
-        
         # Total radius = 10. Distance = 5. Overlap = 10 - 5 = 5.
         # Each moves by overlap / 2 = 2.5
         # food1 moves from 50 to 50 - 2.5 = 47.5
@@ -284,7 +279,6 @@ class TestPhysicsProcessor(unittest.TestCase):
     def test_resolve_food_obstacle_collisions_no_collision(self):
         food = self._create_test_collision_object(pos=[0.0, 0.0], radius=5.0)
         obstacle = self._create_test_collision_object(pos=[20.0, 0.0], radius=5.0)
-        
         initial_food_pos = food.pos.copy()
         initial_obstacle_pos = obstacle.pos.copy()
 
@@ -296,7 +290,6 @@ class TestPhysicsProcessor(unittest.TestCase):
     def test_resolve_food_obstacle_collisions_simple_overlap(self):
         food = self._create_test_collision_object(pos=[50.0, 50.0], radius=5.0) # Edge at 55
         obstacle = self._create_test_collision_object(pos=[53.0, 50.0], radius=5.0) # Edge at 48
-        
         # Distance = 3. Sum of radii = 10. Overlap = 10 - 3 = 7.
         # Food moves by the full overlap.
         # Direction from obstacle to food: food.pos - obstacle.pos = [50-53, 50-50] = [-3, 0]. Normalized = [-1, 0]
@@ -312,7 +305,6 @@ class TestPhysicsProcessor(unittest.TestCase):
     def test_resolve_food_obstacle_collisions_food_completely_inside_obstacle_centered(self):
         food = self._create_test_collision_object(pos=[50.0, 50.0], radius=2.0)
         obstacle = self._create_test_collision_object(pos=[50.0, 50.0], radius=10.0)
-        
         initial_food_pos = food.pos.copy() # Expect food not to move due to (0,0) direction vector
         initial_obstacle_pos = obstacle.pos.copy()
 
@@ -328,12 +320,10 @@ class TestPhysicsProcessor(unittest.TestCase):
         food_radius = 2.0
         obstacle_pos = [50.0, 50.0]
         obstacle_radius = 10.0
-        
         food = self._create_test_collision_object(pos=food_pos, radius=food_radius)
         obstacle = self._create_test_collision_object(pos=obstacle_pos, radius=obstacle_radius)
 
         initial_obstacle_pos = obstacle.pos.copy()
-        
         # dist = 1.0. Sum of radii = 12.0. Overlap = 12.0 - 1.0 = 11.0.
         # Direction from obstacle to food: [51-50, 50-50] = [1,0]. Normalized = [1,0]
         # Food moves from 51.0 to 51.0 + (1.0 * 11.0) = 62.0
@@ -349,7 +339,6 @@ class TestPhysicsProcessor(unittest.TestCase):
     def test_resolve_generic_object_collision_no_collision(self):
         obj1 = self._create_test_collision_object(pos=[0.0, 0.0], radius=5.0)
         obj2 = self._create_test_collision_object(pos=[20.0, 0.0], radius=5.0)
-        
         initial_pos1 = obj1.pos.copy()
         initial_pos2 = obj2.pos.copy()
 
@@ -362,7 +351,6 @@ class TestPhysicsProcessor(unittest.TestCase):
         # obj1 at [50, 50] (radius 5), obj2 at [55, 50] (radius 5). Overlap = 5.
         obj1 = self._create_test_collision_object(pos=[50.0, 50.0], radius=5.0)
         obj2 = self._create_test_collision_object(pos=[55.0, 50.0], radius=5.0)
-        
         # displacement_obj1 = 5 * (5 / 10) = 2.5
         # displacement_obj2 = 5 * (5 / 10) = 2.5
         # Direction = obj1.pos - obj2.pos = [-5,0], normalized = [-1,0]
@@ -398,7 +386,6 @@ class TestPhysicsProcessor(unittest.TestCase):
         # obj1 (r=5) and obj2 (r=3) both at [50, 50]. Overlap = 8.
         obj1 = self._create_test_collision_object(pos=[50.0, 50.0], radius=5.0)
         obj2 = self._create_test_collision_object(pos=[50.0, 50.0], radius=3.0)
-        
         # displacement_obj1 = 8 * (3 / 8) = 3
         # displacement_obj2 = 8 * (5 / 8) = 5
         # Direction defaults to [1,0]
