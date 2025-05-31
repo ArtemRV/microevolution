@@ -8,7 +8,7 @@ class GameObject:
         self.env = env
         self.settings = settings
         self.object_type = object_type  # 'organism', 'food', or 'obstacle'
-        
+
         # Default physical properties (can be overridden by subclasses)
         self.mass = 1.0  # Default mass
         self.elasticity = 0.5  # Default elasticity
@@ -44,12 +44,12 @@ class Organism(GameObject):
     """Класс для организма."""
     def __init__(self, env, settings):
         super().__init__(env, settings, 'organism')
-        
+
         organism_settings = settings.get('organism', {})
         self.mass = float(organism_settings.get('mass', 1.0))
         self.elasticity = float(organism_settings.get('elasticity', 0.5))
         self.friction_coefficient = float(organism_settings.get('friction_coefficient', 0.1))
-        
+
         self.energy = settings['organism']['initial_energy']
         self.visible_obstacle = settings['organism']['visible_obstacle']
         self.visible_food = settings['organism']['visible_food']
@@ -72,8 +72,8 @@ class Organism(GameObject):
 
     def move(self, action, foods, obstacles):
         # prev_pos is based on the position after global updates and collision resolutions
-        prev_pos = self.pos.copy() 
-        
+        prev_pos = self.pos.copy()
+
         # Record the action taken for state representation or other logic
         self.prev_action = action
         self.step_count += 1  # Увеличиваем счетчик шагов
@@ -186,7 +186,7 @@ class Food(GameObject):
     """Food class."""
     def __init__(self, env, settings, existing_objects):
         super().__init__(env, settings, 'food', existing_objects)
-        
+
         food_settings = settings.get('food', {})
         self.mass = float(food_settings.get('mass', 0.2))
         self.elasticity = float(food_settings.get('elasticity', 0.3))
@@ -196,12 +196,12 @@ class Obstacle(GameObject):
     """Obstacle class."""
     def __init__(self, env, settings, existing_objects):
         super().__init__(env, settings, 'obstacle', existing_objects)
-        
+
         obstacle_settings = settings.get('obstacle', {})
         self.mass = float(obstacle_settings.get('mass', 10.0))
         self.elasticity = float(obstacle_settings.get('elasticity', 0.7))
         self.friction_coefficient = float(obstacle_settings.get('friction_coefficient', 0.05))
-        
+
         self.vel = np.random.uniform(-settings['obstacle']['max_speed'], settings['obstacle']['max_speed'], 2)
 
 class Environment:
@@ -353,7 +353,7 @@ class Environment:
         # 5. APPLY SURFACE FRICTION (Primarily for food)
         # Iterate over self.foods which might have changed if eating occurred in self.agent.move()
         for food_item in list(self.foods): # Iterate over a copy in case food_item is removed by some other process
-            if food_item and hasattr(food_item, 'vel') and hasattr(food_item, 'friction_coefficient'): 
+            if food_item and hasattr(food_item, 'vel') and hasattr(food_item, 'friction_coefficient'):
                 self.physics_processor.apply_surface_friction(food_item, self.DELTA_TIME)
 
         # 6. UPDATE GRID, GET STATE, REWARD ACCUMULATION

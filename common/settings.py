@@ -2,20 +2,20 @@
 default_settings = {
     'organism': {
         'radius': 10,
-        'max_speed': 200,
+        'max_speed': 5, # NOTE: max_speed and max_acceleration will likely need significant increase
         'initial_energy': 100,
-        'max_energy': 10000,
-        'max_acceleration': 50,
+        'max_energy': 1000,
+        'max_acceleration': 1, # to compensate for DELTA_TIME in physics calculations (e.g., multiply by ~60).
         'energy_per_food': 20,
-        'energy_per_step': 0.25,
+        'energy_per_step': 0.05,
         'enabled': True,
         'random_start': True,
         'start_radius': 230,
-        'visible_obstacle': 5, # Quantity of obstacle params that will get to model input
-        'visible_food': 5, # Quantity of food params that will get to model input
+        'visible_obstacle': 0, # Quantity of obstacle params that will get to model input
+        'visible_food': 3, # Quantity of food params that will get to model input
         'mass': 1.0,
         'elasticity': 0.5,  # Coefficient of restitution
-        'friction_coefficient': 0.0,
+        'friction_coefficient': 0.2,
     },
     'food': {
         'radius': 5,
@@ -26,13 +26,14 @@ default_settings = {
         'enabled': True,
         'mass': 0.2,
         'elasticity': 0.2,
-        'friction_coefficient': 10.0, # High friction to stop quickly
+        'friction_coefficient': 0.8, # High friction to stop quickly
     },
     'obstacle': {
         'radius': 15,
-        'max_speed': 100,
+        'max_speed': 2, # NOTE: max_speed will likely need significant increase
+                        # to compensate for DELTA_TIME (e.g., multiply by ~60).
         'quantity': 5,
-        'start_quantity': 5,
+        'start_quantity': 3,
         'increment_quantity': 0,
         'enabled': True,
         'mass': 10.0, # Significantly heavier than organism
@@ -55,7 +56,7 @@ default_settings = {
             "enabled": True
         },
         "dish_collision": {
-            "value": -5.0,
+            "value": -25.0,
             "enabled": True,
             "end_episode": True
         },

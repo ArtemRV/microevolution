@@ -73,7 +73,7 @@ class PhysicsProcessor:
 
         if overlap > 1e-6:
             direction = obj1.pos - obj2.pos
-            
+
             # Handle cases where objects are at the same position or very close
             if np.linalg.norm(direction) < 1e-6:
                 direction = np.array([1.0, 0.0]) # Arbitrary direction for separation
@@ -147,7 +147,7 @@ class PhysicsProcessor:
             else:
                 displacement1 = overlap * (m2 / total_mass)
                 displacement2 = overlap * (m1 / total_mass)
-            
+
             obj1.pos = obj1.pos + direction_normalized * displacement1
             obj2.pos = obj2.pos - direction_normalized * displacement2
 
@@ -218,15 +218,15 @@ class PhysicsProcessor:
             else: # Standard mass-based displacement
                 displacement_organism = overlap * (m_other / total_mass)
                 displacement_other = overlap * (m_organism / total_mass)
-            
+
             organism.pos = organism.pos + direction_normalized * displacement_organism
             other_object.pos = other_object.pos - direction_normalized * displacement_other
-        
+
         # This method explicitly does not modify velocities.
 
     def handle_dish_boundary(self, obj):
         dist_to_center = np.linalg.norm(obj.pos - self.env.dish_center)
-        
+
         # Ensure obj has a radius attribute, defaulting to 0 if not (though objects should have it)
         obj_radius = obj.radius if hasattr(obj, 'radius') else 0.0
 
@@ -238,16 +238,16 @@ class PhysicsProcessor:
             # So, collision_normal should point from the object towards the center, or from boundary point to center.
             # The provided example uses (obj.pos - self.env.dish_center), which is outward from center.
             # Let's use this for consistency with the example.
-            
+
             collision_normal = (obj.pos - self.env.dish_center) / (dist_to_center + 1e-6)
 
             # Reflect velocity: v_new = v - 2 * dot(v, n) * n
             # Ensure obj.vel is a numpy array
             if not isinstance(obj.vel, np.ndarray):
                 obj.vel = np.array(obj.vel, dtype=float)
-            
+
             obj.vel = obj.vel - 2 * np.dot(obj.vel, collision_normal) * collision_normal
-            
+
             # Correct position to be on the boundary
             # The object should be placed exactly at (dish_radius - obj.radius) from the center
             # along the collision_normal direction (which is already the normalized direction from center to object)
