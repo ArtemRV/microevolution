@@ -179,7 +179,6 @@ class TestPhysicsProcessor(unittest.TestCase):
         # However, if other Organism methods were called, it might.
         # For this specific test, PhysicsProcessor.settings['organism']['max_acceleration'] is used.
         # org.settings = self.mock_settings
-
         # org.env = self.mock_env # Not used by process_organism_action
         org.object_type = 'organism' # For clarity
         return org
@@ -188,12 +187,10 @@ class TestPhysicsProcessor(unittest.TestCase):
         initial_vel = [0.0, 0.0]
         organism = self._create_test_organism(pos=[0.0, 0.0], vel=initial_vel)
         action = np.array([1.0, 0.0])
-
         max_acceleration = self.mock_settings['organism']['max_acceleration']
         expected_vel = np.array(initial_vel) + action * max_acceleration
 
         self.physics_processor.process_organism_action(organism, action)
-
         np.testing.assert_array_almost_equal(organism.vel, expected_vel, decimal=5)
         self.assertTrue(np.linalg.norm(organism.vel) < organism.max_speed) # Ensure no clamping occurred
 
@@ -240,7 +237,6 @@ class TestPhysicsProcessor(unittest.TestCase):
     def test_resolve_food_food_collisions_no_collision(self):
         food1 = self._create_test_collision_object(pos=[0.0, 0.0], radius=5.0)
         food2 = self._create_test_collision_object(pos=[20.0, 0.0], radius=5.0)
-
         initial_pos1 = food1.pos.copy()
         initial_pos2 = food2.pos.copy()
 
@@ -252,7 +248,6 @@ class TestPhysicsProcessor(unittest.TestCase):
     def test_resolve_food_food_collisions_simple_overlap(self):
         food1 = self._create_test_collision_object(pos=[50.0, 50.0], radius=5.0) # Center at 50
         food2 = self._create_test_collision_object(pos=[55.0, 50.0], radius=5.0) # Center at 55, edge at 50. Overlap is 5.
-
         # Total radius = 10. Distance = 5. Overlap = 10 - 5 = 5.
         # Each moves by overlap / 2 = 2.5
         # food1 moves from 50 to 50 - 2.5 = 47.5
@@ -284,7 +279,6 @@ class TestPhysicsProcessor(unittest.TestCase):
     def test_resolve_food_obstacle_collisions_no_collision(self):
         food = self._create_test_collision_object(pos=[0.0, 0.0], radius=5.0)
         obstacle = self._create_test_collision_object(pos=[20.0, 0.0], radius=5.0)
-
         initial_food_pos = food.pos.copy()
         initial_obstacle_pos = obstacle.pos.copy()
 
@@ -296,7 +290,6 @@ class TestPhysicsProcessor(unittest.TestCase):
     def test_resolve_food_obstacle_collisions_simple_overlap(self):
         food = self._create_test_collision_object(pos=[50.0, 50.0], radius=5.0) # Edge at 55
         obstacle = self._create_test_collision_object(pos=[53.0, 50.0], radius=5.0) # Edge at 48
-
         # Distance = 3. Sum of radii = 10. Overlap = 10 - 3 = 7.
         # Food moves by the full overlap.
         # Direction from obstacle to food: food.pos - obstacle.pos = [50-53, 50-50] = [-3, 0]. Normalized = [-1, 0]
@@ -312,7 +305,6 @@ class TestPhysicsProcessor(unittest.TestCase):
     def test_resolve_food_obstacle_collisions_food_completely_inside_obstacle_centered(self):
         food = self._create_test_collision_object(pos=[50.0, 50.0], radius=2.0)
         obstacle = self._create_test_collision_object(pos=[50.0, 50.0], radius=10.0)
-
         initial_food_pos = food.pos.copy() # Expect food not to move due to (0,0) direction vector
         initial_obstacle_pos = obstacle.pos.copy()
 
@@ -328,12 +320,10 @@ class TestPhysicsProcessor(unittest.TestCase):
         food_radius = 2.0
         obstacle_pos = [50.0, 50.0]
         obstacle_radius = 10.0
-
         food = self._create_test_collision_object(pos=food_pos, radius=food_radius)
         obstacle = self._create_test_collision_object(pos=obstacle_pos, radius=obstacle_radius)
 
         initial_obstacle_pos = obstacle.pos.copy()
-
         # dist = 1.0. Sum of radii = 12.0. Overlap = 12.0 - 1.0 = 11.0.
         # Direction from obstacle to food: [51-50, 50-50] = [1,0]. Normalized = [1,0]
         # Food moves from 51.0 to 51.0 + (1.0 * 11.0) = 62.0
@@ -349,7 +339,6 @@ class TestPhysicsProcessor(unittest.TestCase):
     def test_resolve_generic_object_collision_no_collision(self):
         obj1 = self._create_test_collision_object(pos=[0.0, 0.0], radius=5.0)
         obj2 = self._create_test_collision_object(pos=[20.0, 0.0], radius=5.0)
-
         initial_pos1 = obj1.pos.copy()
         initial_pos2 = obj2.pos.copy()
 
@@ -362,7 +351,6 @@ class TestPhysicsProcessor(unittest.TestCase):
         # obj1 at [50, 50] (radius 5), obj2 at [55, 50] (radius 5). Overlap = 5.
         obj1 = self._create_test_collision_object(pos=[50.0, 50.0], radius=5.0)
         obj2 = self._create_test_collision_object(pos=[55.0, 50.0], radius=5.0)
-
         # displacement_obj1 = 5 * (5 / 10) = 2.5
         # displacement_obj2 = 5 * (5 / 10) = 2.5
         # Direction = obj1.pos - obj2.pos = [-5,0], normalized = [-1,0]
@@ -398,7 +386,6 @@ class TestPhysicsProcessor(unittest.TestCase):
         # obj1 (r=5) and obj2 (r=3) both at [50, 50]. Overlap = 8.
         obj1 = self._create_test_collision_object(pos=[50.0, 50.0], radius=5.0)
         obj2 = self._create_test_collision_object(pos=[50.0, 50.0], radius=3.0)
-
         # displacement_obj1 = 8 * (3 / 8) = 3
         # displacement_obj2 = 8 * (5 / 8) = 5
         # Direction defaults to [1,0]
