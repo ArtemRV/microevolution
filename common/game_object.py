@@ -73,6 +73,7 @@ class Organism(GameObject):
     def move(self, action, foods, obstacles):
         # prev_pos is based on the position after global updates and collision resolutions
         prev_pos = self.pos.copy()
+        collision_epsilon = self.settings.get('physics_constants', {}).get('collision_epsilon', 1e-5)
 
         # Record the action taken for state representation or other logic
         self.prev_action = action
@@ -98,7 +99,7 @@ class Organism(GameObject):
 
         """Collision with the border"""
         dist_to_center = np.linalg.norm(self.pos - self.env.dish_center)
-        if dist_to_center > self.env.dish_radius - self.radius and reward_settings['dish_collision']['enabled']:
+        if dist_to_center >= self.env.dish_radius - self.radius - collision_epsilon and reward_settings['dish_collision']['enabled']:
             self.env.reward.update(reward_settings['dish_collision']['value'], 'dish_collision')
             if reward_settings['dish_collision']['end_episode']:
                 return True
@@ -112,7 +113,7 @@ class Organism(GameObject):
         ate_food = False
         if reward_settings['eat']['enabled']:
             for food in nearby_foods[:]:
-                if np.linalg.norm(self.pos - food.pos) < self.radius + food.radius:
+                if np.linalg.norm(self.pos - food.pos) <= self.radius + food.radius + collision_epsilon:
                     self.env.reward.update(reward_settings['eat']['value'], 'eat')
                     self.energy += self.settings['organism']['energy_per_food']
                     self.food_eaten += 1
@@ -140,7 +141,7 @@ class Organism(GameObject):
         """Collision with an obstacle"""
         if reward_settings['obstacle_collision']['enabled']:
             for obstacle in nearby_obstacles:
-                if np.linalg.norm(self.pos - obstacle.pos) < self.radius + obstacle.radius:
+                if np.linalg.norm(self.pos - obstacle.pos) <= self.radius + obstacle.radius + collision_epsilon:
                     self.env.reward.update(reward_settings['obstacle_collision']['value'], 'obstacle_collision')
                     if reward_settings['obstacle_collision']['end_episode']:
                         return True

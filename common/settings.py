@@ -49,6 +49,7 @@ default_settings = {
     },
     'physics_constants': {
         'g': 9.8,  # Gravitational acceleration (or tuning factor for friction)
+        'collision_epsilon': 1e-5, # Small tolerance for collision detection
     },
     "rewards": {
         "eat": {
