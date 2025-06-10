@@ -1,3 +1,5 @@
+from .utils import load_user_training_settings # Moved function to utils
+
 # Default settings shared by client and server
 default_settings = {
     'organism': {
@@ -84,7 +86,9 @@ default_settings = {
     },
 }
 
-training_settings = {
+USER_SETTINGS_FILE = 'user_training_settings.json'
+
+_default_training_settings = {
     'episodes': 3000,
     'episode_length': 500,
     'actor_lr': 1e-4,
@@ -99,6 +103,10 @@ training_settings = {
     'increment_food': True,
     'increment_episodes': 100,
 }
+
+# Load user settings, overriding defaults if file exists and is valid
+# USER_SETTINGS_FILE definition remains here
+training_settings = load_user_training_settings(_default_training_settings, USER_SETTINGS_FILE)
 
 trainer_settings = {
     **default_settings,

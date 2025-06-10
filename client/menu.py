@@ -6,13 +6,15 @@ import platform
 import pygame
 import pygame_menu
 import os
+import copy # Added import
+import json # Added import
 from pygame_menu.locals import INPUT_INT, INPUT_FLOAT, INPUT_TEXT, ALIGN_LEFT, ALIGN_RIGHT
 from client.plotting import Plotter, test_policy
 from client.render import RenderableEnvironment
 from client.ddpg import DDPGAgent
 from client.model_loader import ModelLoader
-from common.settings import client_settings
-from common.utils import logging
+from common.settings import client_settings, training_settings, _default_training_settings
+from common.utils import logging, prettify_setting_key # Added prettify_setting_key from common.utils
 from common.game_object import Environment
 from torch.utils.tensorboard import SummaryWriter
 
@@ -26,6 +28,9 @@ pygame.init()
 WINDOW_SIZE = (client_settings['general']['width'], client_settings['general']['height'])
 FPS = 120
 THEME = pygame_menu.themes.THEME_SOLARIZED
+USER_SETTINGS_FILE = 'user_training_settings.json'
+
+# Removed prettify_setting_key function definition from here
 
 class Scene:
     """Base class for scenes."""
@@ -261,75 +266,142 @@ class SettingsScene(Scene):
     """Settings scene."""
     def __init__(self, screen, scene_manager):
         super().__init__(screen, scene_manager)
-        self.settings = scene_manager.settings.copy()
-        self.menu = pygame_menu.Menu('Adjust Settings', WINDOW_SIZE[0], WINDOW_SIZE[1], theme=THEME)
+        # Initialize settings_to_edit with a deep copy of training_settings
+        self.settings_to_edit = copy.deepcopy(training_settings)
+        # If scene_manager.settings has 'training_settings', prioritize those (for persistence within session)
+        if 'training_settings' in scene_manager.settings:
+            self.settings_to_edit.update(scene_manager.settings['training_settings'])
+
+        self.menu = pygame_menu.Menu('Adjust Training Settings', WINDOW_SIZE[0], WINDOW_SIZE[1], theme=THEME)
         self.error_label = self.menu.add.label('', label_id='error_label')
 
-        # Input fields for settings
         self.input_fields = {}
-        for key, value in self.settings.items():
-            if key in ['width', 'height', 'dish_radius', 'organism_radius', 'food_radius',
-                       'obstacle_radius', 'food_quantity', 'obstacle_quantity', 'grid_size',
-                       'episode_length', 'episodes']:
-                input_type = INPUT_INT
-                default_value = str(int(value)) if isinstance(value, (int, float)) else str(value)
-            elif key in ['rendering_enabled', 'render_style']:
-                input_type = INPUT_TEXT
-                default_value = str(value).lower() if key == 'rendering_enabled' else value
-            else:
-                input_type = INPUT_FLOAT
-                default_value = str(float(value)) if isinstance(value, (int, float)) else str(value)
+        for key, current_value_for_display in self.settings_to_edit.items():
+            title = prettify_setting_key(key)
+            original_type_ref = _default_training_settings.get(key) # Use original default for type decision
 
-            self.input_fields[key] = self.menu.add.text_input(
-                f'{key}: ',
-                default=default_value,
-                input_type=input_type,
-                onchange=lambda val, k=key: self.update_setting(k, val)
-            )
+            if isinstance(original_type_ref, bool):
+                self.input_fields[key] = self.menu.add.dropselect(
+                    title=title,
+                    items=[('True', True), ('False', False)],
+                    default=0 if current_value_for_display else 1, # Preselect based on current value in settings_to_edit
+                    onchange=lambda selected_value_tuple, k=key: self.update_setting(k, selected_value_tuple[1])
+                )
+            elif isinstance(original_type_ref, int):
+                self.input_fields[key] = self.menu.add.text_input(
+                    title=title,
+                    default=str(current_value_for_display),
+                    input_type=pygame_menu.locals.INPUT_INT,
+                    onchange=lambda val, k=key: self.update_setting(k, val)
+                )
+            elif isinstance(original_type_ref, float):
+                self.input_fields[key] = self.menu.add.text_input(
+                    title=title,
+                    default=str(current_value_for_display),
+                    input_type=pygame_menu.locals.INPUT_FLOAT,
+                    onchange=lambda val, k=key: self.update_setting(k, val)
+                )
+            else: # Default to text input for strings or other types
+                self.input_fields[key] = self.menu.add.text_input(
+                    title=title,
+                    default=str(current_value_for_display),
+                    input_type=pygame_menu.locals.INPUT_TEXT,
+                    onchange=lambda val, k=key: self.update_setting(k, val)
+                )
+
         self.menu.add.button('Save Settings', self.save_settings)
         self.menu.add.button('Reset to Default', self.reset_to_default)
         self.menu.add.button('Back', self.switch_to_main)
 
-    def update_setting(self, key, value):
-        """Update setting value."""
+    def update_setting(self, key, value_from_widget):
+        """Update setting value in self.settings_to_edit with proper type conversion."""
         try:
-            if key in ['width', 'height', 'dish_radius', 'organism_radius', 'food_radius',
-                       'obstacle_radius', 'food_quantity', 'obstacle_quantity', 'grid_size',
-                       'episode_length', 'episodes']:
-                self.settings[key] = int(value) if value.strip() else 0
-            elif key == 'rendering_enabled':
-                self.settings[key] = value.lower() == 'true'
-            elif key == 'render_style':
-                self.settings[key] = value.lower()
-            else:
-                self.settings[key] = float(value) if value.strip() else 0.0
-            self.error_label.set_title('')
+            # Use _default_training_settings for definitive type reference
+            original_default_value = _default_training_settings[key]
+
+            if isinstance(original_default_value, bool):
+                # Value from dropselect should already be bool
+                self.settings_to_edit[key] = bool(value_from_widget)
+            elif isinstance(original_default_value, int):
+                self.settings_to_edit[key] = int(str(value_from_widget).strip()) if str(value_from_widget).strip() else 0
+            elif isinstance(original_default_value, float):
+                self.settings_to_edit[key] = float(str(value_from_widget).strip()) if str(value_from_widget).strip() else 0.0
+            else: # string
+                self.settings_to_edit[key] = str(value_from_widget)
+
+            self.error_label.set_title('') # Clear previous errors
         except ValueError:
-            self.error_label.set_title(f'Invalid value for {key}', font_color=(255, 0, 0))
+            self.error_label.set_title(f'Invalid value for {prettify_setting_key(key)}', font_color=(255, 0, 0))
+        except KeyError:
+             self.error_label.set_title(f'Unknown setting key: {prettify_setting_key(key)}', font_color=(255,0,0))
+        except Exception as e: # Catch any other unexpected errors
+            self.error_label.set_title(f'Error updating {prettify_setting_key(key)}: {e}', font_color=(255,0,0))
 
     def save_settings(self):
-        """Save settings."""
+        """Save current settings_to_edit to scene_manager.settings and client_settings."""
         try:
-            self.scene_manager.settings = self.settings.copy()
+            # Update the 'training_settings' dictionary within scene_manager.settings
+            if 'training_settings' not in self.scene_manager.settings:
+                self.scene_manager.settings['training_settings'] = {}
+            self.scene_manager.settings['training_settings'].update(self.settings_to_edit.copy())
+
+            # Also update the global client_settings to reflect these changes if needed elsewhere
+            # This assumes client_settings might also have a 'training_settings' key or be updated similarly
+            if 'training_settings' not in client_settings:
+                 client_settings['training_settings'] = {} # Should already exist due to SceneManager init
+            client_settings['training_settings'].update(self.settings_to_edit.copy())
+
+            # Save to JSON file
+            try:
+                with open(USER_SETTINGS_FILE, 'w') as f:
+                    json.dump(self.settings_to_edit, f, indent=4)
+                logging.info(f"User training settings saved to {USER_SETTINGS_FILE}")
+                # Optionally, provide user feedback about successful save
+                # self.error_label.set_title('Settings saved successfully!', font_color=(0, 255, 0))
+            except IOError as e:
+                logging.error(f"Error saving user settings to {USER_SETTINGS_FILE}: {e}")
+                # Optionally, display an error to the user via error_label
+                self.error_label.set_title(f'Error saving to file: {e}', font_color=(255, 0, 0))
+                # Do not switch to main if file save fails, so user can see error
+                return
+
             self.switch_to_main()
         except Exception as e:
+            logging.error(f"Error in save_settings: {str(e)}")
             self.error_label.set_title(f'Error saving settings: {str(e)}', font_color=(255, 0, 0))
 
     def reset_to_default(self):
-        """Reset settings to default."""
-        self.settings = client_settings.copy()
+        """Reset settings_to_edit to _default_training_settings and update UI fields. Deletes user settings file."""
+        self.settings_to_edit = copy.deepcopy(_default_training_settings) # Use hardcoded defaults
         for key, field in self.input_fields.items():
-            if key in ['width', 'height', 'dish_radius', 'organism_radius', 'food_radius',
-                       'obstacle_radius', 'food_quantity', 'obstacle_quantity', 'grid_size',
-                       'episode_length', 'episodes']:
-                field.set_value(str(int(self.settings[key])))
-            elif key == 'rendering_enabled':
-                field.set_value(str(self.settings[key]).lower())
-            elif key == 'render_style':
-                field.set_value(self.settings[key])
-            else:
-                field.set_value(str(float(self.settings[key])))
-        self.error_label.set_title('Settings reset to default')
+            if key in self.settings_to_edit: # Ensure key from field is in new defaults
+                value = self.settings_to_edit[key]
+            else: # If a key was in old settings_to_edit but not in _default_training_settings, skip
+                field.set_value('') # Or some other sensible default for orphaned field
+                logging.warning(f"Key {key} from input_fields not found in _default_training_settings during reset.")
+                continue
+
+            new_value_for_field = self.settings_to_edit[key]
+            original_default_type_ref = _default_training_settings[key] # Type reference
+
+            if isinstance(original_default_type_ref, bool):
+                # For dropselect: items=[('True', True), ('False', False)]
+                # Select 'True' (index 0) if new_value_for_field is True, else 'False' (index 1)
+                field.select_option(0 if new_value_for_field else 1)
+            else: # For text_input fields
+                field.set_value(str(new_value_for_field))
+
+        # Attempt to delete the user settings file
+        if os.path.exists(USER_SETTINGS_FILE):
+            try:
+                os.remove(USER_SETTINGS_FILE)
+                logging.info(f"User settings file {USER_SETTINGS_FILE} removed on reset.")
+                self.error_label.set_title('Settings reset to default and user file removed.')
+            except OSError as e:
+                logging.error(f"Error removing user settings file {USER_SETTINGS_FILE}: {e}")
+                self.error_label.set_title(f'Defaults restored. Error removing user file: {e}', font_color=(255,165,0)) # Orange for warning
+        else:
+            self.error_label.set_title('Settings reset to default training values.')
 
     def switch_to_main(self):
         """Return to main menu."""
@@ -494,7 +566,10 @@ class SceneManager:
     def __init__(self, screen):
         self.screen = screen
         self.current_scene = MainMenuScene(screen, self)
-        self.settings = client_settings.copy()
+        # Ensure scene_manager.settings has a 'training_settings' key, initialized if not
+        if 'training_settings' not in client_settings:
+            client_settings['training_settings'] = copy.deepcopy(training_settings)
+        self.settings = client_settings # Now scene_manager.settings refers to client_settings
         self.model_path = None
 
     def set_scene(self, scene):
